@@ -2,8 +2,7 @@
 Functions for identifying isolate (degree zero) nodes.
 """
 import networkx as nx
-
-__all__ = ["is_isolate", "isolates", "number_of_isolates"]
+__all__ = ['is_isolate', 'isolates', 'number_of_isolates']
 
 
 @nx._dispatchable
@@ -36,7 +35,7 @@ def is_isolate(G, n):
     >>> nx.is_isolate(G, 3)
     True
     """
-    return G.degree(n) == 0
+    pass
 
 
 @nx._dispatchable
@@ -82,7 +81,7 @@ def isolates(G):
         [3]
 
     """
-    return (n for n, d in G.degree() if d == 0)
+    pass
 
 
 @nx._dispatchable
@@ -103,5 +102,4 @@ def number_of_isolates(G):
         The number of degree zero nodes in the graph `G`.
 
     """
-    # TODO This can be parallelized.
-    return sum(1 for v in isolates(G))
+    pass

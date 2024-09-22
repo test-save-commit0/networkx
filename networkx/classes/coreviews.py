@@ -3,20 +3,10 @@ These ``Views`` often restrict element access, with either the entire view or
 layers of nested mappings being read-only.
 """
 from collections.abc import Mapping
-
-__all__ = [
-    "AtlasView",
-    "AdjacencyView",
-    "MultiAdjacencyView",
-    "UnionAtlas",
-    "UnionAdjacency",
-    "UnionMultiInner",
-    "UnionMultiAdjacency",
-    "FilterAtlas",
-    "FilterAdjacency",
-    "FilterMultiInner",
-    "FilterMultiAdjacency",
-]
+__all__ = ['AtlasView', 'AdjacencyView', 'MultiAdjacencyView', 'UnionAtlas',
+    'UnionAdjacency', 'UnionMultiInner', 'UnionMultiAdjacency',
+    'FilterAtlas', 'FilterAdjacency', 'FilterMultiInner',
+    'FilterMultiAdjacency']
 
 
 class AtlasView(Mapping):
@@ -31,14 +21,13 @@ class AtlasView(Mapping):
     AdjacencyView: View into dict-of-dict-of-dict
     MultiAdjacencyView: View into dict-of-dict-of-dict-of-dict
     """
-
-    __slots__ = ("_atlas",)
+    __slots__ = '_atlas',
 
     def __getstate__(self):
-        return {"_atlas": self._atlas}
+        return {'_atlas': self._atlas}
 
     def __setstate__(self, state):
-        self._atlas = state["_atlas"]
+        self._atlas = state['_atlas']
 
     def __init__(self, d):
         self._atlas = d
@@ -52,14 +41,11 @@ class AtlasView(Mapping):
     def __getitem__(self, key):
         return self._atlas[key]
 
-    def copy(self):
-        return {n: self[n].copy() for n in self._atlas}
-
     def __str__(self):
-        return str(self._atlas)  # {nbr: self[nbr] for nbr in self})
+        return str(self._atlas)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self._atlas!r})"
+        return f'{self.__class__.__name__}({self._atlas!r})'
 
 
 class AdjacencyView(AtlasView):
@@ -74,14 +60,10 @@ class AdjacencyView(AtlasView):
     AtlasView: View into dict-of-dict
     MultiAdjacencyView: View into dict-of-dict-of-dict-of-dict
     """
-
-    __slots__ = ()  # Still uses AtlasView slots names _atlas
+    __slots__ = ()
 
     def __getitem__(self, name):
         return AtlasView(self._atlas[name])
-
-    def copy(self):
-        return {n: self[n].copy() for n in self._atlas}
 
 
 class MultiAdjacencyView(AdjacencyView):
@@ -96,14 +78,10 @@ class MultiAdjacencyView(AdjacencyView):
     AtlasView: View into dict-of-dict
     AdjacencyView: View into dict-of-dict-of-dict
     """
-
-    __slots__ = ()  # Still uses AtlasView slots names _atlas
+    __slots__ = ()
 
     def __getitem__(self, name):
         return AdjacencyView(self._atlas[name])
-
-    def copy(self):
-        return {n: self[n].copy() for n in self._atlas}
 
 
 class UnionAtlas(Mapping):
@@ -119,15 +97,14 @@ class UnionAtlas(Mapping):
     UnionAdjacency: View into dict-of-dict-of-dict
     UnionMultiAdjacency: View into dict-of-dict-of-dict-of-dict
     """
-
-    __slots__ = ("_succ", "_pred")
+    __slots__ = '_succ', '_pred'
 
     def __getstate__(self):
-        return {"_succ": self._succ, "_pred": self._pred}
+        return {'_succ': self._succ, '_pred': self._pred}
 
     def __setstate__(self, state):
-        self._succ = state["_succ"]
-        self._pred = state["_pred"]
+        self._succ = state['_succ']
+        self._pred = state['_pred']
 
     def __init__(self, succ, pred):
         self._succ = succ
@@ -145,20 +122,11 @@ class UnionAtlas(Mapping):
         except KeyError:
             return self._pred[key]
 
-    def copy(self):
-        result = {nbr: dd.copy() for nbr, dd in self._succ.items()}
-        for nbr, dd in self._pred.items():
-            if nbr in result:
-                result[nbr].update(dd)
-            else:
-                result[nbr] = dd.copy()
-        return result
-
     def __str__(self):
         return str({nbr: self[nbr] for nbr in self})
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self._succ!r}, {self._pred!r})"
+        return f'{self.__class__.__name__}({self._succ!r}, {self._pred!r})'
 
 
 class UnionAdjacency(Mapping):
@@ -178,24 +146,22 @@ class UnionAdjacency(Mapping):
     UnionAtlas: View into dict-of-dict
     UnionMultiAdjacency: View into dict-of-dict-of-dict-of-dict
     """
-
-    __slots__ = ("_succ", "_pred")
+    __slots__ = '_succ', '_pred'
 
     def __getstate__(self):
-        return {"_succ": self._succ, "_pred": self._pred}
+        return {'_succ': self._succ, '_pred': self._pred}
 
     def __setstate__(self, state):
-        self._succ = state["_succ"]
-        self._pred = state["_pred"]
+        self._succ = state['_succ']
+        self._pred = state['_pred']
 
     def __init__(self, succ, pred):
-        # keys must be the same for two input dicts
         assert len(set(succ.keys()) ^ set(pred.keys())) == 0
         self._succ = succ
         self._pred = pred
 
     def __len__(self):
-        return len(self._succ)  # length of each dict should be the same
+        return len(self._succ)
 
     def __iter__(self):
         return iter(self._succ)
@@ -203,14 +169,11 @@ class UnionAdjacency(Mapping):
     def __getitem__(self, nbr):
         return UnionAtlas(self._succ[nbr], self._pred[nbr])
 
-    def copy(self):
-        return {n: self[n].copy() for n in self._succ}
-
     def __str__(self):
         return str({nbr: self[nbr] for nbr in self})
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self._succ!r}, {self._pred!r})"
+        return f'{self.__class__.__name__}({self._succ!r}, {self._pred!r})'
 
 
 class UnionMultiInner(UnionAtlas):
@@ -227,8 +190,7 @@ class UnionMultiInner(UnionAtlas):
     UnionAdjacency:  View into dict-of-dict-of-dict
     UnionMultiAdjacency:  View into dict-of-dict-of-dict-of-dict
     """
-
-    __slots__ = ()  # Still uses UnionAtlas slots names _succ, _pred
+    __slots__ = ()
 
     def __getitem__(self, node):
         in_succ = node in self._succ
@@ -238,10 +200,6 @@ class UnionMultiInner(UnionAtlas):
                 return UnionAtlas(self._succ[node], self._pred[node])
             return UnionAtlas(self._succ[node], {})
         return UnionAtlas({}, self._pred[node])
-
-    def copy(self):
-        nodes = set(self._succ.keys()) | set(self._pred.keys())
-        return {n: self[n].copy() for n in nodes}
 
 
 class UnionMultiAdjacency(UnionAdjacency):
@@ -256,14 +214,13 @@ class UnionMultiAdjacency(UnionAdjacency):
     UnionAtlas:  View into dict-of-dict
     UnionMultiInner:  View into dict-of-dict-of-dict
     """
-
-    __slots__ = ()  # Still uses UnionAdjacency slots names _succ, _pred
+    __slots__ = ()
 
     def __getitem__(self, node):
         return UnionMultiInner(self._succ[node], self._pred[node])
 
 
-class FilterAtlas(Mapping):  # nodedict, nbrdict, keydict
+class FilterAtlas(Mapping):
     """A read-only Mapping of Mappings with filtering criteria for nodes.
 
     It is a view into a dict-of-dict data structure, and it selects only
@@ -284,7 +241,7 @@ class FilterAtlas(Mapping):  # nodedict, nbrdict, keydict
         return sum(1 for n in self)
 
     def __iter__(self):
-        try:  # check that NODE_OK has attr 'nodes'
+        try:
             node_ok_shorter = 2 * len(self.NODE_OK.nodes) < len(self._atlas)
         except AttributeError:
             node_ok_shorter = False
@@ -295,16 +252,16 @@ class FilterAtlas(Mapping):  # nodedict, nbrdict, keydict
     def __getitem__(self, key):
         if key in self._atlas and self.NODE_OK(key):
             return self._atlas[key]
-        raise KeyError(f"Key {key} not found")
+        raise KeyError(f'Key {key} not found')
 
     def __str__(self):
         return str({nbr: self[nbr] for nbr in self})
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self._atlas!r}, {self.NODE_OK!r})"
+        return f'{self.__class__.__name__}({self._atlas!r}, {self.NODE_OK!r})'
 
 
-class FilterAdjacency(Mapping):  # edgedict
+class FilterAdjacency(Mapping):
     """A read-only Mapping of Mappings with filtering criteria for nodes and edges.
 
     It is a view into a dict-of-dict-of-dict data structure, and it selects nodes
@@ -327,7 +284,7 @@ class FilterAdjacency(Mapping):  # edgedict
         return sum(1 for n in self)
 
     def __iter__(self):
-        try:  # check that NODE_OK has attr 'nodes'
+        try:
             node_ok_shorter = 2 * len(self.NODE_OK.nodes) < len(self._atlas)
         except AttributeError:
             node_ok_shorter = False
@@ -340,19 +297,18 @@ class FilterAdjacency(Mapping):  # edgedict
 
             def new_node_ok(nbr):
                 return self.NODE_OK(nbr) and self.EDGE_OK(node, nbr)
-
             return FilterAtlas(self._atlas[node], new_node_ok)
-        raise KeyError(f"Key {node} not found")
+        raise KeyError(f'Key {node} not found')
 
     def __str__(self):
         return str({nbr: self[nbr] for nbr in self})
 
     def __repr__(self):
         name = self.__class__.__name__
-        return f"{name}({self._atlas!r}, {self.NODE_OK!r}, {self.EDGE_OK!r})"
+        return f'{name}({self._atlas!r}, {self.NODE_OK!r}, {self.EDGE_OK!r})'
 
 
-class FilterMultiInner(FilterAdjacency):  # muliedge_seconddict
+class FilterMultiInner(FilterAdjacency):
     """A read-only Mapping of Mappings with filtering criteria for nodes and edges.
 
     It is a view into a dict-of-dict-of-dict-of-dict data structure, and it selects nodes
@@ -366,7 +322,7 @@ class FilterMultiInner(FilterAdjacency):  # muliedge_seconddict
     """
 
     def __iter__(self):
-        try:  # check that NODE_OK has attr 'nodes'
+        try:
             node_ok_shorter = 2 * len(self.NODE_OK.nodes) < len(self._atlas)
         except AttributeError:
             node_ok_shorter = False
@@ -388,12 +344,11 @@ class FilterMultiInner(FilterAdjacency):  # muliedge_seconddict
 
             def new_node_ok(key):
                 return self.EDGE_OK(nbr, key)
-
             return FilterAtlas(self._atlas[nbr], new_node_ok)
-        raise KeyError(f"Key {nbr} not found")
+        raise KeyError(f'Key {nbr} not found')
 
 
-class FilterMultiAdjacency(FilterAdjacency):  # multiedgedict
+class FilterMultiAdjacency(FilterAdjacency):
     """A read-only Mapping of Mappings with filtering criteria
     for nodes and edges.
 
@@ -413,6 +368,5 @@ class FilterMultiAdjacency(FilterAdjacency):  # multiedgedict
 
             def edge_ok(nbr, key):
                 return self.NODE_OK(nbr) and self.EDGE_OK(node, nbr, key)
-
             return FilterMultiInner(self._atlas[node], self.NODE_OK, edge_ok)
-        raise KeyError(f"Key {node} not found")
+        raise KeyError(f'Key {node} not found')
