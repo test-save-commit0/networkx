@@ -89,4 +89,73 @@ def edge_dfs(G, source=None, orientation=None):
     :func:`~networkx.algorithms.traversal.depth_first_search.dfs_edges`
 
     """
-    pass
+    nodes = list(G.nodes())
+    if not nodes:
+        return
+
+    if source is None:
+        source = nodes[0]
+    elif isinstance(source, list):
+        source = source[0]
+
+    if G.is_directed():
+        edges = G.out_edges
+    else:
+        edges = G.edges
+
+    visited_edges = set()
+    visited_nodes = set()
+
+    def dfs(node):
+        visited_nodes.add(node)
+        for edge in edges(node):
+            if len(edge) == 3:
+                u, v, key = edge
+            else:
+                u, v = edge
+                key = None
+
+            edge_tuple = (u, v, key) if key is not None else (u, v)
+            rev_edge_tuple = (v, u, key) if key is not None else (v, u)
+
+            if orientation == 'reverse':
+                edge_tuple, rev_edge_tuple = rev_edge_tuple, edge_tuple
+
+            if edge_tuple not in visited_edges and rev_edge_tuple not in visited_edges:
+                visited_edges.add(edge_tuple)
+                if orientation is None:
+                    yield edge_tuple
+                else:
+                    direction = FORWARD if edge_tuple[0] == u else REVERSE
+                    yield edge_tuple + (direction,)
+
+                if v not in visited_nodes:
+                    yield from dfs(v)
+
+    if orientation == 'ignore':
+        for edge in G.edges():
+            if len(edge) == 3:
+                u, v, key = edge
+            else:
+                u, v = edge
+                key = None
+
+            edge_tuple = (u, v, key) if key is not None else (u, v)
+            rev_edge_tuple = (v, u, key) if key is not None else (v, u)
+
+            if edge_tuple not in visited_edges and rev_edge_tuple not in visited_edges:
+                visited_edges.add(edge_tuple)
+                visited_edges.add(rev_edge_tuple)
+                direction = FORWARD if edge_tuple[0] == u else REVERSE
+                yield edge_tuple + (direction,)
+
+                if v not in visited_nodes:
+                    yield from dfs(v)
+                if u not in visited_nodes:
+                    yield from dfs(u)
+    else:
+        yield from dfs(source)
+
+    for node in nodes:
+        if node not in visited_nodes:
+            yield from dfs(node)
