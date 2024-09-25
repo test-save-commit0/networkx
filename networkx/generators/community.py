@@ -48,7 +48,12 @@ def caveman_graph(l, k):
     .. [1] Watts, D. J. 'Networks, Dynamics, and the Small-World Phenomenon.'
        Amer. J. Soc. 105, 493-527, 1999.
     """
-    pass
+    G = nx.empty_graph(l * k)
+    for i in range(l):
+        start = i * k
+        end = start + k
+        G.add_edges_from((u, v) for u in range(start, end) for v in range(u + 1, end))
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -93,7 +98,13 @@ def connected_caveman_graph(l, k):
     .. [1] Watts, D. J. 'Networks, Dynamics, and the Small-World Phenomenon.'
        Amer. J. Soc. 105, 493-527, 1999.
     """
-    pass
+    if k < 2:
+        raise nx.NetworkXError("Size of cliques must be at least 2")
+    G = caveman_graph(l, k)
+    for i in range(l):
+        G.remove_edge(i * k, i * k + 1)
+        G.add_edge(i * k, (i + 1) % l * k)
+    return G
 
 
 @py_random_state(3)
@@ -136,7 +147,18 @@ def relaxed_caveman_graph(l, k, p, seed=None):
        Physics Reports Volume 486, Issues 3-5, February 2010, Pages 75-174.
        https://arxiv.org/abs/0906.0612
     """
-    pass
+    if not 0 <= p <= 1:
+        raise nx.NetworkXError("p must be in [0,1]")
+
+    G = caveman_graph(l, k)
+    nodes = list(G.nodes())
+    for (u, v) in G.edges():
+        if seed.random() < p:
+            x = seed.choice(nodes)
+            if x not in G[u] and x != u:
+                G.remove_edge(u, v)
+                G.add_edge(u, x)
+    return G
 
 
 @py_random_state(3)
@@ -194,7 +216,34 @@ def random_partition_graph(sizes, p_in, p_out, seed=None, directed=False):
     .. [1] Santo Fortunato 'Community Detection in Graphs' Physical Reports
        Volume 486, Issue 3-5 p. 75-174. https://arxiv.org/abs/0906.0612
     """
-    pass
+    if not 0 <= p_in <= 1 or not 0 <= p_out <= 1:
+        raise nx.NetworkXError("p_in and p_out must be in [0,1]")
+
+    if directed:
+        G = nx.DiGraph()
+    else:
+        G = nx.Graph()
+
+    n = sum(sizes)
+    G.add_nodes_from(range(n))
+    partition = []
+    start = 0
+    for size in sizes:
+        partition.append(set(range(start, start + size)))
+        start += size
+
+    for i, community in enumerate(partition):
+        for u in community:
+            for v in range(u + 1, n):
+                if v in community:
+                    if seed.random() < p_in:
+                        G.add_edge(u, v)
+                else:
+                    if seed.random() < p_out:
+                        G.add_edge(u, v)
+
+    G.graph['partition'] = partition
+    return G
 
 
 @py_random_state(4)
