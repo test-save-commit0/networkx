@@ -93,7 +93,22 @@ def generic_graph_view(G, create_using=None):
     >>> type(viewDG)
     <class 'networkx.classes.digraph.DiGraph'>
     """
-    pass
+    if create_using is None:
+        newG = G.__class__()
+    else:
+        newG = nx.empty_graph(0, create_using)
+    
+    if G.is_multigraph() != newG.is_multigraph():
+        raise NetworkXError("Graph and create_using are not compatible.")
+    
+    newG._graph = G
+    newG.graph = G.graph
+    newG._node = G._node
+    newG._adj = G._adj
+    if G.is_directed():
+        newG._pred = G._pred
+        newG._succ = G._succ
+    return newG
 
 
 @deprecate_positional_args(version='3.4')
@@ -168,7 +183,16 @@ def subgraph_view(G, *, filter_node=no_filter, filter_edge=no_filter):
     >>> view.edges()
     EdgeView([(0, 1), (1, 2), (2, 3)])
     """
-    pass
+    newG = G.__class__()
+    newG._graph = G
+    newG.graph = G.graph
+
+    newG._succ = FilterAdjacency(G._succ if G.is_directed() else G._adj, filter_node, filter_edge)
+    if G.is_directed():
+        newG._pred = FilterAdjacency(G._pred, filter_node, filter_edge)
+    newG._adj = newG._succ
+    newG._node = FilterAtlas(G._node, filter_node)
+    return newG
 
 
 @not_implemented_for('undirected')
@@ -200,4 +224,11 @@ def reverse_view(G):
     >>> view.edges()
     OutEdgeView([(2, 1), (3, 2)])
     """
-    pass
+    newG = G.__class__()
+    newG._graph = G
+    newG.graph = G.graph
+    newG._node = G._node
+    newG._pred = G._succ
+    newG._succ = G._pred
+    newG._adj = newG._succ
+    return newG
