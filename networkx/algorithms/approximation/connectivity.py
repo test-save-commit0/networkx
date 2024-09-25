@@ -3,6 +3,7 @@
 import itertools
 from operator import itemgetter
 import networkx as nx
+from networkx.algorithms.shortest_paths.unweighted import bidirectional_shortest_path
 __all__ = ['local_node_connectivity', 'node_connectivity',
     'all_pairs_node_connectivity']
 
@@ -75,7 +76,32 @@ def local_node_connectivity(G, source, target, cutoff=None):
         http://eclectic.ss.uci.edu/~drwhite/working.pdf
 
     """
-    pass
+    if cutoff is None:
+        cutoff = min(G.degree(source), G.degree(target))
+
+    if G.is_directed():
+        pred = G.predecessors
+        succ = G.successors
+    else:
+        pred = G.neighbors
+        succ = G.neighbors
+
+    exclude = set()
+    paths = 0
+
+    while True:
+        try:
+            path = _bidirectional_shortest_path(G, source, target, exclude)
+        except nx.NetworkXNoPath:
+            break
+
+        exclude.update(set(path) - {source, target})
+        paths += 1
+
+        if paths >= cutoff:
+            break
+
+    return paths
 
 
 @nx._dispatchable(name='approximate_node_connectivity')
@@ -142,7 +168,26 @@ def node_connectivity(G, s=None, t=None):
         http://eclectic.ss.uci.edu/~drwhite/working.pdf
 
     """
-    pass
+    if s is not None and t is not None:
+        return local_node_connectivity(G, s, t)
+    
+    if G.is_directed():
+        if not nx.is_weakly_connected(G):
+            return 0
+        iter_func = itertools.permutations
+    else:
+        if not nx.is_connected(G):
+            return 0
+        iter_func = itertools.combinations
+
+    min_connectivity = float('inf')
+    for s, t in iter_func(G, 2):
+        k = local_node_connectivity(G, s, t)
+        min_connectivity = min(min_connectivity, k)
+        if min_connectivity == 1:
+            return 1
+    
+    return min_connectivity
 
 
 @nx._dispatchable(name='approximate_all_pairs_node_connectivity')
@@ -203,7 +248,20 @@ def all_pairs_node_connectivity(G, nbunch=None, cutoff=None):
         Node-Independent Paths. Santa Fe Institute Working Paper #01-07-035
         http://eclectic.ss.uci.edu/~drwhite/working.pdf
     """
-    pass
+    if nbunch is None:
+        nbunch = G.nodes()
+    else:
+        nbunch = set(nbunch)
+
+    connectivity = {}
+    for u in nbunch:
+        connectivity[u] = {}
+        for v in nbunch:
+            if u == v:
+                continue
+            connectivity[u][v] = local_node_connectivity(G, u, v, cutoff=cutoff)
+
+    return connectivity
 
 
 def _bidirectional_shortest_path(G, source, target, exclude):
