@@ -58,7 +58,38 @@ def cycle_basis(G, root=None):
     simple_cycles
     minimum_cycle_basis
     """
-    pass
+    def _dfs_cycle_basis(G, root):
+        gnodes = set(G.nodes())
+        cycles = []
+        stack = [root]
+        pred = {root: root}
+        used = {root: set()}
+        while stack:
+            z = stack.pop()
+            zused = used[z]
+            for nbr in G[z]:
+                if nbr not in used:
+                    pred[nbr] = z
+                    stack.append(nbr)
+                    used[nbr] = {z}
+                elif nbr == z:
+                    cycles.append([z])
+                elif nbr not in zused:
+                    pn = used[nbr]
+                    cycle = [nbr, z]
+                    p = z
+                    while p not in pn:
+                        cycle.append(p)
+                        p = pred[p]
+                    cycle.append(p)
+                    cycles.append(cycle)
+                    used[nbr].add(z)
+        return cycles
+
+    if root is None:
+        root = next(iter(G))
+    cycles = _dfs_cycle_basis(G, root)
+    return sorted(cycles, key=len)
 
 
 @nx._dispatchable
@@ -154,7 +185,13 @@ def simple_cycles(G, length_bound=None):
     cycle_basis
     chordless_cycles
     """
-    pass
+    if length_bound is not None and length_bound < 0:
+        raise ValueError("length_bound must be non-negative")
+
+    if G.is_directed():
+        return _directed_cycle_search(G, length_bound)
+    else:
+        return _undirected_cycle_search(G, length_bound)
 
 
 def _directed_cycle_search(G, length_bound):
@@ -191,7 +228,67 @@ def _directed_cycle_search(G, length_bound):
     list of nodes
        Each cycle is represented by a list of nodes along the cycle.
     """
-    pass
+    def _johnson_cycle_search(G, v):
+        path = [v]
+        blocked = {v: True}
+        B = {v: set()}
+        stack = [(v, list(G[v]))]
+        while stack:
+            thisnode, nbrs = stack[-1]
+            if nbrs:
+                nextnode = nbrs.pop()
+                if nextnode == v:
+                    yield path[:]
+                elif not blocked[nextnode]:
+                    path.append(nextnode)
+                    blocked[nextnode] = True
+                    B[nextnode] = set()
+                    stack.append((nextnode, list(G[nextnode])))
+            else:
+                blocked[thisnode] = False
+                stack.pop()
+                path.pop()
+                for w in B[thisnode]:
+                    B[w].discard(thisnode)
+                B[thisnode] = set()
+
+    def _bounded_cycle_search(G, v, length_bound):
+        path = [v]
+        blocked = {v: True}
+        B = {v: set()}
+        stack = [(v, list(G[v]))]
+        while stack:
+            thisnode, nbrs = stack[-1]
+            if nbrs and len(path) < length_bound:
+                nextnode = nbrs.pop()
+                if nextnode == v:
+                    yield path[:]
+                elif not blocked[nextnode]:
+                    path.append(nextnode)
+                    blocked[nextnode] = True
+                    B[nextnode] = set()
+                    stack.append((nextnode, list(G[nextnode])))
+            else:
+                blocked[thisnode] = False
+                stack.pop()
+                path.pop()
+                for w in B[thisnode]:
+                    B[w].discard(thisnode)
+                B[thisnode] = set()
+
+    scc = list(nx.strongly_connected_components(G))
+    for component in scc:
+        if len(component) > 1:
+            subG = G.subgraph(component)
+            v = next(iter(subG))
+            if length_bound is None:
+                yield from _johnson_cycle_search(subG, v)
+            else:
+                yield from _bounded_cycle_search(subG, v, length_bound)
+        elif len(component) == 1:
+            v = next(iter(component))
+            if G.has_edge(v, v):
+                yield [v]
 
 
 def _undirected_cycle_search(G, length_bound):
@@ -228,7 +325,35 @@ def _undirected_cycle_search(G, length_bound):
     list of nodes
        Each cycle is represented by a list of nodes along the cycle.
     """
-    pass
+    def _find_cycle(G, u, v, length_bound):
+        def dfs(node, target, path):
+            if len(path) > length_bound:
+                return
+            if node == target:
+                yield path
+            else:
+                for neighbor in G[node]:
+                    if neighbor not in path:
+                        yield from dfs(neighbor, target, path + [neighbor])
+
+        G_copy = G.copy()
+        G_copy.remove_edge(u, v)
+        for path in dfs(v, u, [v]):
+            yield path + [u]
+
+    for component in nx.biconnected_components(G):
+        if len(component) > 2:
+            subG = G.subgraph(component)
+            non_tree_edges = set(subG.edges()) - set(nx.minimum_spanning_edges(subG))
+            for u, v in non_tree_edges:
+                if length_bound is None:
+                    yield from _find_cycle(subG, u, v, float('inf'))
+                else:
+                    yield from _find_cycle(subG, u, v, length_bound - 1)
+        elif len(component) == 2:
+            u, v = component
+            if G.number_of_edges(u, v) > 1:
+                yield [u, v]
 
 
 class _NeighborhoodCache(dict):
