@@ -129,7 +129,29 @@ def prefix_tree(paths):
         >>> sorted(recovered)
         ['ab', 'abs', 'ad']
     """
-    pass
+    tree = nx.DiGraph()
+    tree.add_node(0, source=None)  # Root node
+    tree.add_node(-1, source="NIL")  # Nil node
+
+    node_count = 1
+    for path in paths:
+        current_node = 0
+        for element in path:
+            # Check if the element already exists as a child of the current node
+            child = next((n for n in tree.successors(current_node) 
+                          if tree.nodes[n]["source"] == element), None)
+            if child is None:
+                # If not, create a new node
+                tree.add_node(node_count, source=element)
+                tree.add_edge(current_node, node_count)
+                current_node = node_count
+                node_count += 1
+            else:
+                current_node = child
+        # Add an edge to the nil node for the last element of the path
+        tree.add_edge(current_node, -1)
+
+    return tree
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -226,7 +248,29 @@ def prefix_tree_recursive(paths):
         >>> sorted(recovered)
         ['ab', 'abs', 'ad']
     """
-    pass
+    tree = nx.DiGraph()
+    tree.add_node(0, source=None)  # Root node
+    tree.add_node(-1, source="NIL")  # Nil node
+
+    def add_path(path, node=0, depth=0):
+        if depth == len(path):
+            tree.add_edge(node, -1)
+            return node
+        
+        element = path[depth]
+        for child in tree.successors(node):
+            if tree.nodes[child]["source"] == element:
+                return add_path(path, child, depth + 1)
+        
+        new_node = len(tree) - 1  # -1 is already used for NIL
+        tree.add_node(new_node, source=element)
+        tree.add_edge(node, new_node)
+        return add_path(path, new_node, depth + 1)
+
+    for path in paths:
+        add_path(path)
+
+    return tree
 
 
 @py_random_state(1)
@@ -297,7 +341,34 @@ def random_tree(n, seed=None, create_using=None):
             │           └─╼ 5
             └─╼ 9
     """
-    pass
+    import warnings
+    warnings.warn(
+        "random_tree is deprecated and will be removed in NX v3.4. "
+        "Use random_labeled_tree instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    
+    if n == 0:
+        raise nx.NetworkXPointlessConcept("Cannot create a null tree")
+    
+    if create_using is None:
+        create_using = nx.Graph
+    
+    G = create_using()
+    G.add_nodes_from(range(n))
+    
+    if n == 1:
+        return G
+    
+    # Generate a random Prüfer sequence
+    sequence = [seed.randint(0, n - 1) for _ in range(n - 2)]
+    
+    # Convert Prüfer sequence to a tree
+    edges = nx.from_prufer_sequence(sequence)
+    G.add_edges_from(edges)
+    
+    return G
 
 
 @py_random_state('seed')
@@ -328,7 +399,23 @@ def random_labeled_tree(n, *, seed=None):
     NetworkXPointlessConcept
         If `n` is zero (because the null graph is not a tree).
     """
-    pass
+    if n == 0:
+        raise nx.NetworkXPointlessConcept("Cannot create a null tree")
+    
+    if n == 1:
+        return nx.Graph([(0, 0)])
+    
+    # Generate a random Prüfer sequence
+    sequence = [seed.randint(0, n - 1) for _ in range(n - 2)]
+    
+    # Convert Prüfer sequence to a tree
+    edges = nx.from_prufer_sequence(sequence)
+    
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+    G.add_edges_from(edges)
+    
+    return G
 
 
 @py_random_state('seed')
@@ -363,7 +450,14 @@ def random_labeled_rooted_tree(n, *, seed=None):
     NetworkXPointlessConcept
         If `n` is zero (because the null graph is not a tree).
     """
-    pass
+    if n == 0:
+        raise nx.NetworkXPointlessConcept("Cannot create a null tree")
+    
+    G = random_labeled_tree(n, seed=seed)
+    root = seed.randint(0, n - 1)
+    G.graph["root"] = root
+    
+    return G
 
 
 @py_random_state('seed')
