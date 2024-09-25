@@ -78,7 +78,53 @@ def approximate_current_flow_betweenness_centrality(G, normalized=True,
        LNCS 3404, pp. 533-544. Springer-Verlag, 2005.
        https://doi.org/10.1007/978-3-540-31856-9_44
     """
-    pass
+    import numpy as np
+    from networkx.utils import dict_to_numpy_array
+
+    n = G.number_of_nodes()
+    if n < 3:
+        raise nx.NetworkXError("Graph must have at least three nodes.")
+
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Graph must be connected.")
+
+    betweenness = dict.fromkeys(G, 0.0)
+    nb = dict(G.degree(weight=weight))
+
+    if solver == 'full':
+        solver_func = FullInverseLaplacian
+    elif solver == 'lu':
+        solver_func = SuperLUInverseLaplacian
+    elif solver == 'cg':
+        solver_func = CGInverseLaplacian
+    else:
+        raise nx.NetworkXError("Unknown solver %s." % solver)
+
+    L = nx.laplacian_matrix(G, weight=weight, dtype=dtype, format='csr')
+    C = solver_func(L, dtype=dtype)
+
+    rng = np.random.default_rng(seed)
+    k = min(int(1 / (epsilon ** 2)), kmax)
+    for _ in range(k):
+        s, t = rng.choice(n, size=2, replace=False)
+        b = np.zeros(n, dtype=dtype)
+        b[s] = 1
+        b[t] = -1
+        p = C.solve(b)
+        for u, v in G.edges():
+            current = abs(p[u] - p[v])
+            betweenness[u] += current
+            betweenness[v] += current
+
+    if normalized:
+        factor = 1 / ((n - 1) * (n - 2))
+    else:
+        factor = 1 / (2 * k)
+
+    for v in betweenness:
+        betweenness[v] *= factor
+
+    return betweenness
 
 
 @not_implemented_for('directed')
@@ -155,7 +201,53 @@ def current_flow_betweenness_centrality(G, normalized=True, weight=None,
     .. [2] A measure of betweenness centrality based on random walks,
        M. E. J. Newman, Social Networks 27, 39-54 (2005).
     """
-    pass
+    import numpy as np
+    from networkx.utils import dict_to_numpy_array
+
+    n = G.number_of_nodes()
+    if n < 3:
+        raise nx.NetworkXError("Graph must have at least three nodes.")
+
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Graph must be connected.")
+
+    betweenness = dict.fromkeys(G, 0.0)
+    nb = dict(G.degree(weight=weight))
+
+    if solver == 'full':
+        solver_func = FullInverseLaplacian
+    elif solver == 'lu':
+        solver_func = SuperLUInverseLaplacian
+    elif solver == 'cg':
+        solver_func = CGInverseLaplacian
+    else:
+        raise nx.NetworkXError("Unknown solver %s." % solver)
+
+    L = nx.laplacian_matrix(G, weight=weight, dtype=dtype, format='csr')
+    C = solver_func(L, dtype=dtype)
+
+    for s in G:
+        for t in G:
+            if s == t:
+                continue
+            b = np.zeros(n, dtype=dtype)
+            b[s] = 1
+            b[t] = -1
+            p = C.solve(b)
+            for u, v in G.edges():
+                current = abs(p[u] - p[v])
+                betweenness[u] += current
+                betweenness[v] += current
+
+    if normalized:
+        factor = 1 / ((n - 1) * (n - 2))
+    else:
+        factor = 0.5
+
+    for v in betweenness:
+        betweenness[v] *= factor
+
+    return betweenness
 
 
 @not_implemented_for('directed')
@@ -238,4 +330,53 @@ def edge_current_flow_betweenness_centrality(G, normalized=True, weight=
     .. [2] A measure of betweenness centrality based on random walks,
        M. E. J. Newman, Social Networks 27, 39-54 (2005).
     """
-    pass
+    import numpy as np
+    from networkx.utils import dict_to_numpy_array
+
+    if G.is_directed():
+        raise nx.NetworkXError("edge_current_flow_betweenness_centrality() not defined for digraphs.")
+
+    n = G.number_of_nodes()
+    if n < 3:
+        raise nx.NetworkXError("Graph must have at least three nodes.")
+
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Graph must be connected.")
+
+    betweenness = dict.fromkeys(G.edges(), 0.0)
+    nb = dict(G.degree(weight=weight))
+
+    if solver == 'full':
+        solver_func = FullInverseLaplacian
+    elif solver == 'lu':
+        solver_func = SuperLUInverseLaplacian
+    elif solver == 'cg':
+        solver_func = CGInverseLaplacian
+    else:
+        raise nx.NetworkXError("Unknown solver %s." % solver)
+
+    L = nx.laplacian_matrix(G, weight=weight, dtype=dtype, format='csr')
+    C = solver_func(L, dtype=dtype)
+
+    for s in G:
+        for t in G:
+            if s == t:
+                continue
+            b = np.zeros(n, dtype=dtype)
+            b[s] = 1
+            b[t] = -1
+            p = C.solve(b)
+            for u, v in G.edges():
+                current = abs(p[u] - p[v])
+                betweenness[(u, v)] += current
+                betweenness[(v, u)] += current
+
+    if normalized:
+        factor = 1 / ((n - 1) * (n - 2))
+    else:
+        factor = 0.5
+
+    for edge in betweenness:
+        betweenness[edge] *= factor
+
+    return betweenness
