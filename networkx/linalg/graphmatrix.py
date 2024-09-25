@@ -63,7 +63,46 @@ def incidence_matrix(G, nodelist=None, edgelist=None, oriented=False,
     .. [1] Gil Strang, Network applications: A = incidence matrix,
        http://videolectures.net/mit18085f07_strang_lec03/
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+
+    if nodelist is None:
+        nodelist = list(G)
+    if edgelist is None:
+        if G.is_multigraph():
+            edgelist = list(G.edges(keys=True))
+        else:
+            edgelist = list(G.edges())
+    
+    nlen = len(nodelist)
+    elen = len(edgelist)
+    
+    node_index = {node: i for i, node in enumerate(nodelist)}
+    
+    # Create a sparse matrix
+    A = sparse.lil_matrix((nlen, elen), dtype=dtype)
+    
+    for ei, e in enumerate(edgelist):
+        u, v = e[:2]
+        if oriented:
+            ui = node_index[u]
+            vi = node_index[v]
+            if weight is not None:
+                wt = G[u][v].get(weight, 1)
+            else:
+                wt = 1
+            A[ui, ei] = -wt
+            A[vi, ei] = wt
+        else:
+            for n in (u, v):
+                ni = node_index[n]
+                if weight is not None:
+                    wt = G[u][v].get(weight, 1)
+                else:
+                    wt = 1
+                A[ni, ei] = wt
+    
+    return A.asformat("csc")
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -125,4 +164,28 @@ def adjacency_matrix(G, nodelist=None, dtype=None, weight='weight'):
     to_dict_of_dicts
     adjacency_spectrum
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+
+    if nodelist is None:
+        nodelist = list(G)
+    
+    nlen = len(nodelist)
+    node_index = {node: i for i, node in enumerate(nodelist)}
+    
+    # Create a sparse matrix
+    A = sparse.lil_matrix((nlen, nlen), dtype=dtype)
+    
+    for u, v, data in G.edges(data=True):
+        if u not in node_index or v not in node_index:
+            continue
+        i, j = node_index[u], node_index[v]
+        if weight is None:
+            wt = 1
+        else:
+            wt = data.get(weight, 1)
+        A[i, j] += wt
+        if not G.is_directed():
+            A[j, i] = A[i, j]
+    
+    return A.asformat("csr")
