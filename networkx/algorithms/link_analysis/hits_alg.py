@@ -69,7 +69,48 @@ def hits(G, max_iter=100, tol=1e-08, nstart=None, normalized=True):
        doi:10.1145/324133.324140.
        http://www.cs.cornell.edu/home/kleinber/auth.pdf.
     """
-    pass
+    import numpy as np
+    from networkx.exception import PowerIterationFailedConvergence
+
+    if len(G) == 0:
+        return {}, {}
+    
+    A = nx.to_numpy_array(G)
+    n = A.shape[0]
+    
+    if nstart is None:
+        h = np.ones(n) / n
+    else:
+        h = np.array(list(nstart.values()))
+        h = h / h.sum()
+    
+    a = np.zeros(n)
+    
+    for _ in range(max_iter):
+        h_last, a_last = h.copy(), a.copy()
+        
+        a = A.T @ h
+        if a.sum() != 0:
+            a = a / a.sum()
+        
+        h = A @ a
+        if h.sum() != 0:
+            h = h / h.sum()
+        
+        if np.allclose(h, h_last, atol=tol) and np.allclose(a, a_last, atol=tol):
+            break
+    else:
+        raise PowerIterationFailedConvergence(max_iter)
+    
+    hubs = dict(zip(G.nodes(), h))
+    authorities = dict(zip(G.nodes(), a))
+    
+    if normalized:
+        h_sum, a_sum = sum(hubs.values()), sum(authorities.values())
+        hubs = {k: v / h_sum for k, v in hubs.items()}
+        authorities = {k: v / a_sum for k, v in authorities.items()}
+    
+    return hubs, authorities
 
 
 def _hits_numpy(G, normalized=True):
@@ -132,7 +173,30 @@ def _hits_numpy(G, normalized=True):
        doi:10.1145/324133.324140.
        http://www.cs.cornell.edu/home/kleinber/auth.pdf.
     """
-    pass
+    import numpy as np
+    
+    if len(G) == 0:
+        return {}, {}
+    
+    adj_matrix = nx.to_numpy_array(G)
+    hubs_matrix = adj_matrix @ adj_matrix.T
+    authority_matrix = adj_matrix.T @ adj_matrix
+    
+    _, hubs_vector = np.linalg.eigh(hubs_matrix, eigvals=(hubs_matrix.shape[0]-1, hubs_matrix.shape[0]-1))
+    _, auth_vector = np.linalg.eigh(authority_matrix, eigvals=(authority_matrix.shape[0]-1, authority_matrix.shape[0]-1))
+    
+    hubs_vector = hubs_vector.flatten().real
+    auth_vector = auth_vector.flatten().real
+    
+    hubs = dict(zip(G.nodes(), hubs_vector))
+    authorities = dict(zip(G.nodes(), auth_vector))
+    
+    if normalized:
+        h_sum, a_sum = sum(abs(h) for h in hubs.values()), sum(abs(a) for a in authorities.values())
+        hubs = {k: abs(v) / h_sum for k, v in hubs.items()}
+        authorities = {k: abs(v) / a_sum for k, v in authorities.items()}
+    
+    return hubs, authorities
 
 
 def _hits_scipy(G, max_iter=100, tol=1e-06, nstart=None, normalized=True):
@@ -203,4 +267,46 @@ def _hits_scipy(G, max_iter=100, tol=1e-06, nstart=None, normalized=True):
        doi:10.1145/324133.324140.
        http://www.cs.cornell.edu/home/kleinber/auth.pdf.
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+    from networkx.exception import PowerIterationFailedConvergence
+    
+    if len(G) == 0:
+        return {}, {}
+    
+    A = nx.to_scipy_sparse_array(G, dtype=float)
+    n = A.shape[0]
+    
+    if nstart is None:
+        h = np.ones(n) / n
+    else:
+        h = np.array(list(nstart.values()))
+        h = h / h.sum()
+    
+    a = np.zeros(n)
+    
+    for _ in range(max_iter):
+        h_last, a_last = h.copy(), a.copy()
+        
+        a = A.T @ h
+        if a.sum() != 0:
+            a = a / a.sum()
+        
+        h = A @ a
+        if h.sum() != 0:
+            h = h / h.sum()
+        
+        if np.allclose(h, h_last, atol=tol) and np.allclose(a, a_last, atol=tol):
+            break
+    else:
+        raise PowerIterationFailedConvergence(max_iter)
+    
+    hubs = dict(zip(G.nodes(), h))
+    authorities = dict(zip(G.nodes(), a))
+    
+    if normalized:
+        h_sum, a_sum = sum(hubs.values()), sum(authorities.values())
+        hubs = {k: v / h_sum for k, v in hubs.items()}
+        authorities = {k: v / a_sum for k, v in authorities.items()}
+    
+    return hubs, authorities
