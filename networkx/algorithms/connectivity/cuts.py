@@ -125,7 +125,36 @@ def minimum_st_edge_cut(G, s, t, flow_func=None, auxiliary=None, residual=None
     5
 
     """
-    pass
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    if auxiliary is None:
+        H = build_auxiliary_edge_connectivity(G)
+    else:
+        H = auxiliary
+
+    # The edge connectivity algorithm needs an undirected graph
+    # so we need to make sure that influence propagates symmetrically
+    if not G.is_directed():
+        for u, v in H.edges():
+            H.add_edge(v, u, capacity=H[u][v]['capacity'])
+
+    if residual is None:
+        R = build_residual_network(H, 'capacity')
+    else:
+        R = residual
+
+    kwargs = dict(capacity='capacity', flow_func=flow_func, residual=R)
+
+    cut_value, partition = nx.minimum_cut(H, s, t, **kwargs)
+    reachable, non_reachable = partition
+
+    # Find the edges that connect the two sets in the original graph
+    cutset = set()
+    for u, nbrs in ((n, G[n]) for n in reachable):
+        cutset.update((u, v) for v in nbrs if v in non_reachable)
+
+    return cutset
 
 
 @nx._dispatchable(graphs={'G': 0, 'auxiliary?': 4}, preserve_node_attrs={
@@ -249,7 +278,39 @@ def minimum_st_node_cut(G, s, t, flow_func=None, auxiliary=None, residual=None
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if auxiliary is None:
+        H = build_auxiliary_node_connectivity(G)
+    else:
+        H = auxiliary
+
+    mapping = H.graph['mapping']
+    R = None
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    if residual is None:
+        R = build_residual_network(H, 'capacity')
+    else:
+        R = residual
+
+    kwargs = dict(capacity='capacity', flow_func=flow_func, residual=R)
+
+    # The edge connectivity algorithm needs an undirected graph
+    # so we need to make sure that influence propagates symmetrically
+    if not G.is_directed():
+        for u, v in H.edges():
+            H.add_edge(v, u, capacity=H[u][v]['capacity'])
+
+    cut_value, partition = nx.minimum_cut(H, f"{mapping[s]}B", f"{mapping[t]}A", **kwargs)
+    reachable, non_reachable = partition
+
+    # Find the nodes that correspond to the edges that connect the two sets in the original graph
+    cutset = set()
+    for node in reachable:
+        if node.endswith('A'):
+            cutset.add(mapping.get(node[:-1]))
+
+    return cutset - {s, t}
 
 
 @nx._dispatchable
@@ -346,7 +407,41 @@ def minimum_node_cut(G, s=None, t=None, flow_func=None):
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if s is not None and t is not None:
+        return minimum_st_node_cut(G, s, t, flow_func=flow_func)
+
+    # Use the algorithm from Knuth's paper [1]
+    if G.is_directed():
+        if not nx.is_weakly_connected(G):
+            raise nx.NetworkXError("Input graph is not connected")
+        iter_func = itertools.permutations
+        def neighbors(v):
+            return itertools.chain(G.predecessors(v), G.successors(v))
+    else:
+        if not nx.is_connected(G):
+            raise nx.NetworkXError("Input graph is not connected")
+        iter_func = itertools.combinations
+        neighbors = G.neighbors
+
+    # Compute a dominating set for G
+    D = nx.dominating_set(G)
+
+    # We need at least two nodes in the dominating set
+    if len(D) < 2:
+        return D
+
+    # Compute the minimum node cut using the dominating set
+    min_cut = None
+    for x, y in iter_func(D, 2):
+        try:
+            cut = minimum_st_node_cut(G, x, y, flow_func=flow_func)
+            if min_cut is None or len(cut) < len(min_cut):
+                min_cut = cut
+        except nx.NetworkXError:
+            # x and y are not connected, try a different pair
+            pass
+
+    return min_cut
 
 
 @nx._dispatchable
@@ -445,4 +540,47 @@ def minimum_edge_cut(G, s=None, t=None, flow_func=None):
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if s is not None and t is not None:
+        return minimum_st_edge_cut(G, s, t, flow_func=flow_func)
+
+    if G.is_directed():
+        if not nx.is_weakly_connected(G):
+            raise nx.NetworkXError("Input graph is not connected")
+        
+        # Algorithm 8 from [1]
+        if len(G) == 1:
+            return set()
+        
+        cut_value = float('inf')
+        cut_set = set()
+        for u in G:
+            for v in G:
+                if u != v:
+                    this_cut = minimum_st_edge_cut(G, u, v, flow_func=flow_func)
+                    if len(this_cut) < cut_value:
+                        cut_value = len(this_cut)
+                        cut_set = this_cut
+        return cut_set
+    else:
+        # Algorithm 6 from [1]
+        if not nx.is_connected(G):
+            raise nx.NetworkXError("Input graph is not connected")
+        
+        # Find a 'small' dominating set for G.
+        D = nx.dominating_set(G)
+        
+        # If dominating set has only one node, then we return min_edge_cut.
+        if len(D) == 1:
+            v = D.pop()
+            return set(min((G.edges(v), G.edges(G.neighbors(v))), key=len))
+        
+        # Otherwise, we find the minimum edge cut between v and D.
+        v = D.pop()
+        length = float('inf')
+        min_cut = None
+        for w in D:
+            this_cut = minimum_st_edge_cut(G, v, w, flow_func=flow_func)
+            if len(this_cut) < length:
+                length = len(this_cut)
+                min_cut = this_cut
+        return min_cut
