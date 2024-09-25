@@ -64,4 +64,48 @@ def asyn_fluidc(G, k, max_iter=100, seed=None):
        Competitive and Highly Scalable Community Detection Algorithm".
        [https://arxiv.org/pdf/1703.09307.pdf].
     """
-    pass
+    if not is_connected(G):
+        raise NetworkXError("Graph must be connected.")
+
+    # Initialize communities
+    vertices = list(G)
+    seed.shuffle(vertices)
+    communities = {i: {vertices[i]} for i in range(k)}
+    vertex_comm = {v: c for c, vs in communities.items() for v in vs}
+
+    # Initialize densities
+    density = {i: 1.0 / len(comm) for i, comm in communities.items()}
+
+    for _ in range(max_iter):
+        changes = False
+        seed.shuffle(vertices)
+
+        for v in vertices:
+            old_comm = vertex_comm[v]
+            comm_counter = Counter()
+
+            # Count communities of neighbors
+            for neighbor in G[v]:
+                neighbor_comm = vertex_comm[neighbor]
+                comm_counter[neighbor_comm] += density[neighbor_comm]
+
+            # Find the community with maximum density
+            new_comm = max(comm_counter, key=comm_counter.get, default=old_comm)
+
+            if new_comm != old_comm:
+                # Update communities
+                communities[old_comm].remove(v)
+                communities[new_comm].add(v)
+                vertex_comm[v] = new_comm
+
+                # Update densities
+                old_size, new_size = len(communities[old_comm]), len(communities[new_comm])
+                density[old_comm] = 1.0 / old_size if old_size > 0 else 0
+                density[new_comm] = 1.0 / new_size
+
+                changes = True
+
+        if not changes:
+            break
+
+    return [comm for comm in communities.values() if comm]
