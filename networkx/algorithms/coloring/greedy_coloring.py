@@ -19,7 +19,7 @@ def strategy_largest_first(G, colors):
     ``G`` is a NetworkX graph. ``colors`` is ignored.
 
     """
-    pass
+    return sorted(G.nodes(), key=lambda n: G.degree(n), reverse=True)
 
 
 @py_random_state(2)
@@ -32,7 +32,9 @@ def strategy_random_sequential(G, colors, seed=None):
         Indicator of random number generation state.
         See :ref:`Randomness<randomness>`.
     """
-    pass
+    nodes = list(G.nodes())
+    seed.shuffle(nodes)
+    return nodes
 
 
 def strategy_smallest_last(G, colors):
@@ -54,7 +56,34 @@ def strategy_smallest_last(G, colors):
     maximal independent set.
 
     """
-    pass
+    H = G.copy()
+    result = deque()
+    degree_buckets = defaultdict(set)
+    
+    for node, degree in H.degree():
+        degree_buckets[degree].add(node)
+    
+    def pop_min_degree_node():
+        min_degree = min(degree_buckets.keys())
+        node = degree_buckets[min_degree].pop()
+        if not degree_buckets[min_degree]:
+            del degree_buckets[min_degree]
+        return node
+    
+    while H:
+        node = pop_min_degree_node()
+        for neighbor in H[node]:
+            old_degree = H.degree(neighbor)
+            H.remove_edge(node, neighbor)
+            new_degree = old_degree - 1
+            degree_buckets[old_degree].remove(neighbor)
+            if not degree_buckets[old_degree]:
+                del degree_buckets[old_degree]
+            degree_buckets[new_degree].add(neighbor)
+        H.remove_node(node)
+        result.appendleft(node)
+    
+    return result
 
 
 def _maximal_independent_set(G):
@@ -63,7 +92,16 @@ def _maximal_independent_set(G):
     subgraph of unchosen nodes).
 
     """
-    pass
+    result = set()
+    available = set(G.nodes())
+    
+    while available:
+        min_degree_node = min(available, key=lambda n: sum(1 for neighbor in G[n] if neighbor in available))
+        result.add(min_degree_node)
+        available.remove(min_degree_node)
+        available -= set(G[min_degree_node])
+    
+    return result
 
 
 def strategy_independent_set(G, colors):
@@ -83,7 +121,14 @@ def strategy_independent_set(G, colors):
     instead of a maximal independent set.
 
     """
-    pass
+    remaining_nodes = set(G.nodes())
+    color = 0
+    while remaining_nodes:
+        independent_set = _maximal_independent_set(G.subgraph(remaining_nodes))
+        for node in independent_set:
+            colors[node] = color
+        remaining_nodes -= independent_set
+        color += 1
 
 
 def strategy_connected_sequential_bfs(G, colors):
@@ -96,7 +141,7 @@ def strategy_connected_sequential_bfs(G, colors):
     ``G`` is a NetworkX graph. ``colors`` is ignored.
 
     """
-    pass
+    return nx.bfs_tree(G, arbitrary_element(G))
 
 
 def strategy_connected_sequential_dfs(G, colors):
@@ -109,7 +154,7 @@ def strategy_connected_sequential_dfs(G, colors):
     ``G`` is a NetworkX graph. ``colors`` is ignored.
 
     """
-    pass
+    return nx.dfs_tree(G, arbitrary_element(G))
 
 
 def strategy_connected_sequential(G, colors, traversal='bfs'):
@@ -126,7 +171,13 @@ def strategy_connected_sequential(G, colors, traversal='bfs'):
     ``G`` is a NetworkX graph. ``colors`` is ignored.
 
     """
-    pass
+    if traversal == 'bfs':
+        return strategy_connected_sequential_bfs(G, colors)
+    elif traversal == 'dfs':
+        return strategy_connected_sequential_dfs(G, colors)
+    else:
+        raise nx.NetworkXError("Please specify one of the strings 'bfs' or 'dfs' "
+                               "for connected sequential ordering.")
 
 
 def strategy_saturation_largest_first(G, colors):
@@ -137,7 +188,23 @@ def strategy_saturation_largest_first(G, colors):
     ``G`` to colors, for those nodes that have already been colored.
 
     """
-    pass
+    distinct_colors = {node: set() for node in G}
+    saturation = {node: 0 for node in G}
+    uncolored = set(G)
+
+    def get_next_node():
+        return max(uncolored, key=lambda n: (saturation[n], G.degree(n)))
+
+    while uncolored:
+        node = get_next_node()
+        yield node
+        uncolored.remove(node)
+
+        for neighbor in G[node]:
+            if neighbor in uncolored:
+                saturation[neighbor] = len(distinct_colors[neighbor])
+            if node in colors:
+                distinct_colors[neighbor].add(colors[node])
 
 
 STRATEGIES = {'largest_first': strategy_largest_first, 'random_sequential':
