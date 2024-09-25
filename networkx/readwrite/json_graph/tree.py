@@ -55,7 +55,18 @@ def tree_data(G, root, ident='id', children='children'):
     --------
     tree_graph, node_link_data, adjacency_data
     """
-    pass
+    if ident == children:
+        raise nx.NetworkXError("The 'ident' and 'children' attributes must be different.")
+
+    def add_children(n):
+        node = G.nodes[n].copy()
+        node[ident] = n
+        c = [add_children(child) for child in G.successors(n)]
+        if c:
+            node[children] = c
+        return node
+
+    return add_children(root)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -90,4 +101,18 @@ def tree_graph(data, ident='id', children='children'):
     --------
     tree_data, node_link_data, adjacency_data
     """
-    pass
+    if ident == children:
+        raise nx.NetworkXError("The 'ident' and 'children' attributes must be different.")
+
+    def add_node(G, parent, node):
+        n = node[ident]
+        G.add_node(n, **{k: v for k, v in node.items() if k != ident and k != children})
+        if parent is not None:
+            G.add_edge(parent, n)
+        if children in node:
+            for child in node[children]:
+                add_node(G, n, child)
+
+    G = nx.DiGraph()
+    add_node(G, None, data)
+    return G
