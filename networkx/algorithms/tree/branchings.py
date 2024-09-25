@@ -55,7 +55,7 @@ def branching_weight(G, attr='weight', default=1):
     11
 
     """
-    pass
+    return sum(G[u][v].get(attr, default) for u, v in G.edges())
 
 
 @py_random_state(4)
@@ -93,7 +93,18 @@ def greedy_branching(G, attr='weight', default=1, kind='max', seed=None):
         The greedily obtained branching.
 
     """
-    pass
+    B = G.__class__()
+    B.add_nodes_from(G.nodes())
+
+    edges = sorted(G.edges(data=True), 
+                   key=lambda x: x[2].get(attr, default), 
+                   reverse=(kind == 'max'))
+    
+    for u, v, data in edges:
+        if B.in_degree(v) == 0 and not nx.has_path(B, v, u):
+            B.add_edge(u, v, **data)
+
+    return B
 
 
 class MultiDiGraph_EdgeKey(nx.MultiDiGraph):
@@ -139,7 +150,16 @@ def get_path(G, u, v):
     MultiDiGraph_EdgeKey.
 
     """
-    pass
+    path = []
+    current = v
+    while current != u:
+        in_edges = list(G.in_edges(current, keys=True))
+        if not in_edges:
+            return None  # No path exists
+        edge = in_edges[0]  # There should be only one in-edge in a branching
+        path.append(edge[2])  # Append the edge key
+        current = edge[0]
+    return list(reversed(path))
 
 
 class Edmonds:
@@ -265,7 +285,20 @@ def minimal_branching(G, /, *, attr='weight', default=1, preserve_attrs=
     B : (multi)digraph-like
         A minimal branching.
     """
-    pass
+    B = G.__class__()
+    B.add_nodes_from(G.nodes())
+
+    edges = sorted(G.edges(data=True), 
+                   key=lambda x: x[2].get(attr, default))
+    
+    for u, v, data in edges:
+        if B.in_degree(v) == 0 and not nx.has_path(B, v, u):
+            if preserve_attrs:
+                B.add_edge(u, v, **data)
+            else:
+                B.add_edge(u, v, **{attr: data.get(attr, default)})
+
+    return B
 
 
 docstring_branching = """
