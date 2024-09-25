@@ -25,7 +25,9 @@ def _apply_prediction(G, func, ebunch=None):
     non-edges in the graph `G` will be used.
 
     """
-    pass
+    if ebunch is None:
+        ebunch = nx.non_edges(G)
+    return ((u, v, func(u, v)) for u, v in ebunch)
 
 
 @not_implemented_for('directed')
@@ -84,7 +86,10 @@ def resource_allocation_index(G, ebunch=None):
        Eur. Phys. J. B 71 (2009) 623.
        https://arxiv.org/pdf/0901.0553.pdf
     """
-    pass
+    def predict(u, v):
+        return sum(1 / G.degree(w) for w in nx.common_neighbors(G, u, v))
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -142,7 +147,13 @@ def jaccard_coefficient(G, ebunch=None):
            The Link Prediction Problem for Social Networks (2004).
            http://www.cs.cornell.edu/home/kleinber/link-pred.pdf
     """
-    pass
+    def predict(u, v):
+        union_size = len(set(G[u]) | set(G[v]))
+        if union_size == 0:
+            return 0
+        return len(list(nx.common_neighbors(G, u, v))) / union_size
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -202,7 +213,10 @@ def adamic_adar_index(G, ebunch=None):
            The Link Prediction Problem for Social Networks (2004).
            http://www.cs.cornell.edu/home/kleinber/link-pred.pdf
     """
-    pass
+    def predict(u, v):
+        return sum(1 / log(G.degree(w)) for w in nx.common_neighbors(G, u, v))
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -288,7 +302,13 @@ def common_neighbor_centrality(G, ebunch=None, alpha=0.8):
            Sci Rep 10, 364 (2020).
            https://doi.org/10.1038/s41598-019-57304-y
     """
-    pass
+    def predict(u, v):
+        common_neighbors = len(list(nx.common_neighbors(G, u, v)))
+        shortest_path = nx.shortest_path_length(G, u, v)
+        N = G.number_of_nodes()
+        return alpha * common_neighbors + (1 - alpha) * (N / shortest_path)
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -346,7 +366,10 @@ def preferential_attachment(G, ebunch=None):
            The Link Prediction Problem for Social Networks (2004).
            http://www.cs.cornell.edu/home/kleinber/link-pred.pdf
     """
-    pass
+    def predict(u, v):
+        return G.degree(u) * G.degree(v)
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -422,7 +445,15 @@ def cn_soundarajan_hopcroft(G, ebunch=None, community='community'):
        World Wide Web (WWW '12 Companion). ACM, New York, NY, USA, 607-608.
        http://doi.acm.org/10.1145/2187980.2188150
     """
-    pass
+    def predict(u, v):
+        Cu = _community(G, u, community)
+        Cv = _community(G, v, community)
+        cnbors = list(nx.common_neighbors(G, u, v))
+        score = len(cnbors)
+        score += sum(_community(G, w, community) == Cu == Cv for w in cnbors)
+        return score
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -500,7 +531,16 @@ def ra_index_soundarajan_hopcroft(G, ebunch=None, community='community'):
        World Wide Web (WWW '12 Companion). ACM, New York, NY, USA, 607-608.
        http://doi.acm.org/10.1145/2187980.2188150
     """
-    pass
+    def predict(u, v):
+        Cu = _community(G, u, community)
+        Cv = _community(G, v, community)
+        return sum(
+            1 / G.degree(w)
+            for w in nx.common_neighbors(G, u, v)
+            if _community(G, w, community) == Cu == Cv
+        )
+    
+    return _apply_prediction(G, predict, ebunch)
 
 
 @not_implemented_for('directed')
@@ -583,9 +623,23 @@ def within_inter_cluster(G, ebunch=None, delta=0.001, community='community'):
        Artificial Intelligence (SBIA'12)
        https://doi.org/10.1007/978-3-642-34459-6_10
     """
-    pass
+    if delta <= 0:
+        raise nx.NetworkXAlgorithmError("Delta must be greater than zero")
+
+    def predict(u, v):
+        Cu = _community(G, u, community)
+        Cv = _community(G, v, community)
+        cnbors = set(nx.common_neighbors(G, u, v))
+        within = set(w for w in cnbors if _community(G, w, community) == Cu == Cv)
+        inter = cnbors - within
+        return len(within) / (len(inter) + delta)
+
+    return _apply_prediction(G, predict, ebunch)
 
 
 def _community(G, u, community):
     """Get the community of the given node."""
-    pass
+    try:
+        return G.nodes[u][community]
+    except KeyError:
+        raise nx.NetworkXAlgorithmError("No community information available for node {0}".format(u))
