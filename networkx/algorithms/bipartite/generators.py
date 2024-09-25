@@ -41,7 +41,23 @@ def complete_bipartite_graph(n1, n2, create_using=None):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.complete_bipartite_graph
     """
-    pass
+    if create_using is None:
+        create_using = nx.Graph()
+    elif not create_using.is_directed():
+        create_using = nx.Graph(create_using)
+    else:
+        create_using = nx.DiGraph(create_using)
+
+    if isinstance(n1, numbers.Integral):
+        n1 = range(n1)
+    if isinstance(n2, numbers.Integral):
+        n2 = range(n1, n1 + n2)
+
+    G = create_using
+    G.add_nodes_from(n1, bipartite=0)
+    G.add_nodes_from(n2, bipartite=1)
+    G.add_edges_from((u, v) for u in n1 for v in n2)
+    return G
 
 
 @py_random_state(3)
@@ -80,7 +96,36 @@ def configuration_model(aseq, bseq, create_using=None, seed=None):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.configuration_model
     """
-    pass
+    if create_using is None:
+        create_using = nx.MultiGraph()
+    elif not create_using.is_multigraph():
+        raise nx.NetworkXError("create_using must be a multigraph")
+
+    G = create_using
+    G.clear()
+
+    if sum(aseq) != sum(bseq):
+        raise nx.NetworkXError("Degree sequences must have equal sums")
+
+    n = len(aseq)
+    m = len(bseq)
+    
+    stubs = []
+    for i, d in enumerate(aseq):
+        stubs.extend([i] * d)
+        G.add_node(i, bipartite=0)
+    for i, d in enumerate(bseq, start=n):
+        stubs.extend([i] * d)
+        G.add_node(i, bipartite=1)
+
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+    rng.shuffle(stubs)
+
+    while stubs:
+        u, v = stubs.pop(), stubs.pop()
+        G.add_edge(u, v)
+
+    return G
 
 
 @nx._dispatchable(name='bipartite_havel_hakimi_graph', graphs=None,
@@ -117,7 +162,43 @@ def havel_hakimi_graph(aseq, bseq, create_using=None):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.havel_hakimi_graph
     """
-    pass
+    if create_using is None:
+        create_using = nx.MultiGraph()
+    elif not create_using.is_multigraph():
+        raise nx.NetworkXError("create_using must be a multigraph")
+
+    G = create_using
+    G.clear()
+
+    if sum(aseq) != sum(bseq):
+        raise nx.NetworkXError("Degree sequences must have equal sums")
+
+    n = len(aseq)
+    m = len(bseq)
+
+    for i in range(n):
+        G.add_node(i, bipartite=0)
+    for i in range(n, n + m):
+        G.add_node(i, bipartite=1)
+
+    A = sorted([(d, i) for i, d in enumerate(aseq)], reverse=True)
+    B = sorted([(d, i) for i, d in enumerate(bseq, start=n)], reverse=True)
+
+    while A and B:
+        da, a = A.pop(0)
+        while da and B:
+            db, b = B.pop(0)
+            G.add_edge(a, b)
+            da -= 1
+            db -= 1
+            if db:
+                B.append((db, b))
+                B.sort(reverse=True)
+        if da:
+            A.append((da, a))
+            A.sort(reverse=True)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -153,7 +234,43 @@ def reverse_havel_hakimi_graph(aseq, bseq, create_using=None):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.reverse_havel_hakimi_graph
     """
-    pass
+    if create_using is None:
+        create_using = nx.MultiGraph()
+    elif not create_using.is_multigraph():
+        raise nx.NetworkXError("create_using must be a multigraph")
+
+    G = create_using
+    G.clear()
+
+    if sum(aseq) != sum(bseq):
+        raise nx.NetworkXError("Degree sequences must have equal sums")
+
+    n = len(aseq)
+    m = len(bseq)
+
+    for i in range(n):
+        G.add_node(i, bipartite=0)
+    for i in range(n, n + m):
+        G.add_node(i, bipartite=1)
+
+    A = sorted([(d, i) for i, d in enumerate(aseq)], reverse=True)
+    B = sorted([(d, i) for i, d in enumerate(bseq, start=n)])
+
+    while A and B:
+        da, a = A.pop(0)
+        while da and B:
+            db, b = B.pop(0)
+            G.add_edge(a, b)
+            da -= 1
+            db -= 1
+            if db:
+                B.append((db, b))
+                B.sort()
+        if da:
+            A.append((da, a))
+            A.sort(reverse=True)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -190,7 +307,48 @@ def alternating_havel_hakimi_graph(aseq, bseq, create_using=None):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.alternating_havel_hakimi_graph
     """
-    pass
+    if create_using is None:
+        create_using = nx.MultiGraph()
+    elif not create_using.is_multigraph():
+        raise nx.NetworkXError("create_using must be a multigraph")
+
+    G = create_using
+    G.clear()
+
+    if sum(aseq) != sum(bseq):
+        raise nx.NetworkXError("Degree sequences must have equal sums")
+
+    n = len(aseq)
+    m = len(bseq)
+
+    for i in range(n):
+        G.add_node(i, bipartite=0)
+    for i in range(n, n + m):
+        G.add_node(i, bipartite=1)
+
+    A = sorted([(d, i) for i, d in enumerate(aseq)], reverse=True)
+    B = sorted([(d, i) for i, d in enumerate(bseq, start=n)], reverse=True)
+
+    alternate = True
+    while A and B:
+        da, a = A.pop(0)
+        while da and B:
+            if alternate:
+                db, b = B.pop(0)
+            else:
+                db, b = B.pop()
+            G.add_edge(a, b)
+            da -= 1
+            db -= 1
+            if db:
+                B.append((db, b))
+                B.sort(reverse=True)
+            alternate = not alternate
+        if da:
+            A.append((da, a))
+            A.sort(reverse=True)
+
+    return G
 
 
 @py_random_state(3)
@@ -234,7 +392,42 @@ def preferential_attachment_graph(aseq, p, create_using=None, seed=None):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.preferential_attachment_graph
     """
-    pass
+    if create_using is None:
+        create_using = nx.Graph()
+    elif create_using.is_directed():
+        raise nx.NetworkXError("Directed Graph not supported")
+
+    G = create_using
+    G.clear()
+
+    if p < 0 or p > 1:
+        raise nx.NetworkXError("Probability p must be in [0,1]")
+
+    n = len(aseq)
+    m = 0  # Number of nodes in set B
+
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+
+    for i in range(n):
+        G.add_node(i, bipartite=0)
+
+    stubs = list(range(n)) * aseq[0]
+    for i in range(1, n):
+        for _ in range(aseq[i]):
+            if rng.random() < p:
+                # Add a new node to set B
+                new_node = n + m
+                G.add_node(new_node, bipartite=1)
+                G.add_edge(i, new_node)
+                stubs.append(new_node)
+                m += 1
+            else:
+                # Connect to an existing node in set B
+                j = rng.choice(stubs)
+                G.add_edge(i, j)
+            stubs.append(i)
+
+    return G
 
 
 @py_random_state(3)
@@ -283,7 +476,48 @@ def random_graph(n, m, p, seed=None, directed=False):
        "Efficient generation of large random networks",
        Phys. Rev. E, 71, 036113, 2005.
     """
-    pass
+    if directed:
+        G = nx.DiGraph()
+    else:
+        G = nx.Graph()
+
+    G.add_nodes_from(range(n), bipartite=0)
+    G.add_nodes_from(range(n, n + m), bipartite=1)
+
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+
+    if p <= 0:
+        return G
+    if p >= 1:
+        return nx.complete_bipartite_graph(n, m)
+
+    lp = math.log(1.0 - p)
+
+    v = 0
+    w = -1
+    while v < n:
+        lr = math.log(1.0 - rng.random())
+        w = w + 1 + int(lr / lp)
+        while w >= m and v < n:
+            w = w - m
+            v = v + 1
+        if v < n:
+            G.add_edge(v, n + w)
+
+    if directed:
+        # Add edges in the reverse direction
+        v = 0
+        w = -1
+        while v < n:
+            lr = math.log(1.0 - rng.random())
+            w = w + 1 + int(lr / lp)
+            while w >= m and v < n:
+                w = w - m
+                v = v + 1
+            if v < n:
+                G.add_edge(n + w, v)
+
+    return G
 
 
 @py_random_state(3)
@@ -331,4 +565,25 @@ def gnmk_random_graph(n, m, k, seed=None, directed=False):
     This function is not imported in the main namespace.
     To use it use nx.bipartite.gnmk_random_graph
     """
-    pass
+    if directed:
+        G = nx.DiGraph()
+    else:
+        G = nx.Graph()
+
+    G.add_nodes_from(range(n), bipartite=0)
+    G.add_nodes_from(range(n, n + m), bipartite=1)
+
+    if k > n * m:
+        return nx.complete_bipartite_graph(n, m)
+
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+
+    edge_count = 0
+    while edge_count < k:
+        u = rng.randint(0, n - 1)
+        v = rng.randint(n, n + m - 1)
+        if not G.has_edge(u, v):
+            G.add_edge(u, v)
+            edge_count += 1
+
+    return G
