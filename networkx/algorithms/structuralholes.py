@@ -15,7 +15,9 @@ def mutual_weight(G, u, v, weight=None):
     Pre-conditions: `u` and `v` must both be in `G`.
 
     """
-    pass
+    w_uv = G[u].get(v, {}).get(weight, 1)
+    w_vu = G[v].get(u, {}).get(weight, 1)
+    return w_uv + w_vu
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -35,7 +37,10 @@ def normalized_mutual_weight(G, u, v, norm=sum, weight=None):
     attribute used as weight.
 
     """
-    pass
+    mw_uv = mutual_weight(G, u, v, weight)
+    mw_neighbors = [mutual_weight(G, u, w, weight) for w in G[u] if w != u]
+    normalization = norm(mw_neighbors)
+    return mw_uv / normalization if normalization != 0 else 0
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -118,7 +123,39 @@ def effective_size(G, nodes=None, weight=None):
            http://www.analytictech.com/connections/v20(1)/holes.htm
 
     """
-    pass
+    if nodes is None:
+        nodes = G.nodes()
+    
+    effective_sizes = {}
+    
+    for u in nodes:
+        neighbors = set(G.neighbors(u))
+        if u in neighbors:
+            neighbors.remove(u)
+        
+        n = len(neighbors)
+        
+        if n == 0:
+            effective_sizes[u] = 0
+            continue
+        
+        if weight is None and G.is_directed() == False:
+            # Use Borgatti's simplified formula for unweighted, undirected graphs
+            t = sum(1 for v in neighbors for w in G.neighbors(v) if w in neighbors)
+            effective_sizes[u] = n - (2 * t) / n
+        else:
+            # Use Burt's formula
+            effective_size = 0
+            for v in neighbors:
+                p_uv = normalized_mutual_weight(G, u, v, weight=weight)
+                redundancy = sum(
+                    p_uv * normalized_mutual_weight(G, v, w, weight=weight)
+                    for w in G.neighbors(v) if w != u
+                )
+                effective_size += 1 - redundancy
+            effective_sizes[u] = effective_size
+    
+    return effective_sizes
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -168,7 +205,20 @@ def constraint(G, nodes=None, weight=None):
            American Journal of Sociology (110): 349–399.
 
     """
-    pass
+    if nodes is None:
+        nodes = G.nodes()
+    
+    constraints = {}
+    
+    for v in nodes:
+        neighbors = set(G.neighbors(v))
+        if v in neighbors:
+            neighbors.remove(v)
+        
+        constraint_v = sum(local_constraint(G, v, w, weight) for w in neighbors)
+        constraints[v] = constraint_v
+    
+    return constraints
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -222,4 +272,17 @@ def local_constraint(G, u, v, weight=None):
            American Journal of Sociology (110): 349–399.
 
     """
-    pass
+    p_uv = normalized_mutual_weight(G, u, v, weight=weight)
+    
+    neighbors_v = set(G.neighbors(v))
+    if u in neighbors_v:
+        neighbors_v.remove(u)
+    
+    indirect_constraint = sum(
+        normalized_mutual_weight(G, u, w, weight=weight) *
+        normalized_mutual_weight(G, w, v, weight=weight)
+        for w in neighbors_v
+    )
+    
+    local_constraint_value = (p_uv + indirect_constraint) ** 2
+    return local_constraint_value
