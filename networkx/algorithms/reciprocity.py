@@ -37,12 +37,22 @@ def reciprocity(G, nodes=None):
     In such cases this function will return None.
 
     """
-    pass
+    return dict(_reciprocity_iter(G, nodes))
 
 
 def _reciprocity_iter(G, nodes):
     """Return an iterator of (node, reciprocity)."""
-    pass
+    if nodes is None:
+        nodes = G.nodes()
+    for n in nodes:
+        in_edges = set(G.in_edges(n))
+        out_edges = set(G.out_edges(n))
+        total_edges = len(in_edges) + len(out_edges)
+        if total_edges == 0:
+            yield (n, None)
+        else:
+            reciprocal_edges = len(in_edges.intersection([(v, u) for (u, v) in out_edges]))
+            yield (n, reciprocal_edges / total_edges)
 
 
 @not_implemented_for('undirected', 'multigraph')
@@ -58,4 +68,9 @@ def overall_reciprocity(G):
        A networkx graph
 
     """
-    pass
+    n_all_edges = G.number_of_edges()
+    if n_all_edges == 0:
+        raise NetworkXError("Not defined for empty graphs")
+
+    n_reciprocal_edges = sum(1 for u, v in G.edges() if G.has_edge(v, u))
+    return n_reciprocal_edges / n_all_edges
