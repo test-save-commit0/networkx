@@ -267,7 +267,20 @@ def is_d_separator(G, x, y, z):
 
     https://en.wikipedia.org/wiki/Bayesian_network#d-separation
     """
-    pass
+    if not nx.is_directed_acyclic_graph(G):
+        raise nx.NetworkXError("Graph must be a directed acyclic graph.")
+
+    x = {x} if isinstance(x, (str, int)) else set(x)
+    y = {y} if isinstance(y, (str, int)) else set(y)
+    z = {z} if isinstance(z, (str, int)) else set(z)
+
+    if not set(x) <= set(G.nodes) or not set(y) <= set(G.nodes) or not set(z) <= set(G.nodes):
+        raise nx.NodeNotFound("Some nodes are not in the graph.")
+
+    if not set(x).isdisjoint(y) or not set(x).isdisjoint(z) or not set(y).isdisjoint(z):
+        raise nx.NetworkXError("Node sets must be disjoint.")
+
+    return len(_reachable(G, x, set(G.nodes), z).intersection(y)) == 0
 
 
 @not_implemented_for('undirected')
@@ -327,7 +340,33 @@ def find_minimal_d_separator(G, x, y, *, included=None, restricted=None):
         minimal d-separators in linear time and applications." In
         Uncertainty in Artificial Intelligence, pp. 637-647. PMLR, 2020.
     """
-    pass
+    if not nx.is_directed_acyclic_graph(G):
+        raise nx.NetworkXError("Graph must be a directed acyclic graph.")
+
+    x = {x} if isinstance(x, (str, int)) else set(x)
+    y = {y} if isinstance(y, (str, int)) else set(y)
+    included = set() if included is None else {included} if isinstance(included, (str, int)) else set(included)
+    restricted = set(G.nodes) if restricted is None else {restricted} if isinstance(restricted, (str, int)) else set(restricted)
+
+    if not set(x) <= set(G.nodes) or not set(y) <= set(G.nodes) or not included <= set(G.nodes) or not restricted <= set(G.nodes):
+        raise nx.NodeNotFound("Some nodes are not in the graph.")
+
+    if not set(x).isdisjoint(y) or not set(x).isdisjoint(included) or not set(y).isdisjoint(included):
+        raise nx.NetworkXError("Node sets must be disjoint.")
+
+    ancestors = set(chain(*(nx.ancestors(G, node) for node in chain(x, y, included))))
+    ancestors.update(x, y, included)
+    subgraph = G.subgraph(ancestors)
+
+    wx = _reachable(subgraph, x, ancestors, included)
+    wy = _reachable(subgraph, y, ancestors, included)
+
+    z = included.union(wx.intersection(wy).intersection(restricted))
+
+    if wx.intersection(y) or wy.intersection(x):
+        return None
+
+    return z
 
 
 @not_implemented_for('undirected')
@@ -414,7 +453,33 @@ def is_minimal_d_separator(G, x, y, z, *, included=None, restricted=None):
 
     For full details, see [1]_.
     """
-    pass
+    if not nx.is_directed_acyclic_graph(G):
+        raise nx.NetworkXError("Graph must be a directed acyclic graph.")
+
+    x = {x} if isinstance(x, (str, int)) else set(x)
+    y = {y} if isinstance(y, (str, int)) else set(y)
+    z = {z} if isinstance(z, (str, int)) else set(z)
+    included = set() if included is None else {included} if isinstance(included, (str, int)) else set(included)
+    restricted = set(G.nodes) if restricted is None else {restricted} if isinstance(restricted, (str, int)) else set(restricted)
+
+    if not set(x) <= set(G.nodes) or not set(y) <= set(G.nodes) or not set(z) <= set(G.nodes) or not included <= set(G.nodes) or not restricted <= set(G.nodes):
+        raise nx.NodeNotFound("Some nodes are not in the graph.")
+
+    if not set(x).isdisjoint(y) or not set(x).isdisjoint(z) or not set(y).isdisjoint(z):
+        raise nx.NetworkXError("Node sets must be disjoint.")
+
+    if not is_d_separator(G, x, y, z):
+        return False
+
+    ancestors = set(chain(*(nx.ancestors(G, node) for node in chain(x, y, included))))
+    ancestors.update(x, y, included)
+    subgraph = G.subgraph(ancestors)
+
+    wx = _reachable(subgraph, x, ancestors, z)
+    wy = _reachable(subgraph, y, ancestors, z)
+
+    return (included <= z <= restricted.intersection(ancestors) and
+            z.difference(included) <= wx.intersection(wy))
 
 
 @not_implemented_for('undirected')
@@ -455,7 +520,29 @@ def _reachable(G, x, a, z):
        Fourteenth Conference on Uncertainty in Artificial Intelligence
        (UAI), (pp. 480–487). 1998.
     """
-    pass
+    x = {x} if isinstance(x, (str, int)) else set(x)
+    a = {a} if isinstance(a, (str, int)) else set(a)
+    z = {z} if isinstance(z, (str, int)) else set(z)
+
+    w = set()
+    queue = deque(x)
+    visited_top = set()
+    visited_bottom = set()
+
+    while queue:
+        v = queue.popleft()
+        if v in a:
+            w.add(v)
+            if v not in visited_top:
+                visited_top.add(v)
+                queue.extend(G.predecessors(v))
+            if v not in z and v not in visited_bottom:
+                visited_bottom.add(v)
+                queue.extend(G.successors(v))
+        elif v not in z:
+            queue.extend(G.predecessors(v))
+
+    return w
 
 
 def d_separated(G, x, y, z):
