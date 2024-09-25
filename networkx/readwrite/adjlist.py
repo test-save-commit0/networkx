@@ -68,7 +68,8 @@ def generate_adjlist(G, delimiter=' '):
     NB: This option is not available for data that isn't user-generated.
 
     """
-    pass
+    for n, nbrs in G.adjacency():
+        yield delimiter.join(str(nbr) for nbr in [n] + list(nbrs))
 
 
 @open_file(1, mode='wb')
@@ -117,7 +118,16 @@ def write_adjlist(G, path, comments='#', delimiter=' ', encoding='utf-8'):
     --------
     read_adjlist, generate_adjlist
     """
-    pass
+    import sys
+    import time
+
+    path.write(f"{comments} GMT {time.asctime(time.gmtime())}\n".encode(encoding))
+    path.write(f"{comments} {G.name}\n".encode(encoding))
+    path.write(f"{comments} {G.number_of_nodes()} nodes, {G.number_of_edges()} edges\n".encode(encoding))
+
+    for line in generate_adjlist(G, delimiter):
+        line += '\n'
+        path.write(line.encode(encoding))
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -163,7 +173,33 @@ def parse_adjlist(lines, comments='#', delimiter=None, create_using=None,
     read_adjlist
 
     """
-    pass
+    from ast import literal_eval
+
+    G = nx.empty_graph(0, create_using)
+
+    for line in lines:
+        p = line.find(comments)
+        if p >= 0:
+            line = line[:p]
+        if not line:
+            continue
+        vlist = line.strip().split(delimiter)
+        u = vlist.pop(0)
+        if nodetype is not None:
+            try:
+                u = nodetype(u)
+            except:
+                raise TypeError(f"Failed to convert node {u} to type {nodetype}")
+        G.add_node(u)
+        if vlist:
+            for v in vlist:
+                if nodetype is not None:
+                    try:
+                        v = nodetype(v)
+                    except:
+                        raise TypeError(f"Failed to convert node {v} to type {nodetype}")
+                G.add_edge(u, v)
+    return G
 
 
 @open_file(0, mode='rb')
@@ -237,4 +273,9 @@ def read_adjlist(path, comments='#', delimiter=None, create_using=None,
     --------
     write_adjlist
     """
-    pass
+    lines = (line.decode(encoding) for line in path)
+    return parse_adjlist(lines,
+                         comments=comments,
+                         delimiter=delimiter,
+                         create_using=create_using,
+                         nodetype=nodetype)
