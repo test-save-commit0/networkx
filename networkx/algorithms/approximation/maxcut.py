@@ -53,7 +53,32 @@ def randomized_partitioning(G, seed=None, p=0.5, weight=None):
     NetworkXNotImplemented
         If the graph is directed or is a multigraph.
     """
-    pass
+    if not 0 <= p <= 1:
+        raise ValueError("p must be in the range [0, 1]")
+
+    nodes = list(G.nodes())
+    partition_1 = set()
+    partition_2 = set()
+
+    # Randomly assign nodes to partitions
+    for node in nodes:
+        if seed.random() < p:
+            partition_1.add(node)
+        else:
+            partition_2.add(node)
+
+    # Calculate the cut size
+    cut_size = 0
+    for u, v, edge_data in G.edges(data=True):
+        if weight is None:
+            edge_weight = 1
+        else:
+            edge_weight = edge_data.get(weight, 1)
+
+        if (u in partition_1 and v in partition_2) or (u in partition_2 and v in partition_1):
+            cut_size += edge_weight
+
+    return cut_size, (partition_1, partition_2)
 
 
 @not_implemented_for('directed')
@@ -107,4 +132,45 @@ def one_exchange(G, initial_cut=None, seed=None, weight=None):
     NetworkXNotImplemented
         If the graph is directed or is a multigraph.
     """
-    pass
+    nodes = list(G.nodes())
+    if initial_cut is None:
+        initial_cut = set()
+    else:
+        initial_cut = set(initial_cut)
+
+    complement = set(nodes) - initial_cut
+
+    def calculate_cut_value(cut):
+        cut_value = 0
+        for u, v, edge_data in G.edges(data=True):
+            if weight is None:
+                edge_weight = 1
+            else:
+                edge_weight = edge_data.get(weight, 1)
+
+            if (u in cut and v not in cut) or (u not in cut and v in cut):
+                cut_value += edge_weight
+        return cut_value
+
+    current_cut = initial_cut.copy()
+    current_cut_value = calculate_cut_value(current_cut)
+
+    improved = True
+    while improved:
+        improved = False
+        for node in nodes:
+            # Try moving the node to the other partition
+            if node in current_cut:
+                new_cut = current_cut - {node}
+            else:
+                new_cut = current_cut | {node}
+
+            new_cut_value = calculate_cut_value(new_cut)
+
+            if new_cut_value > current_cut_value:
+                current_cut = new_cut
+                current_cut_value = new_cut_value
+                improved = True
+                break
+
+    return current_cut_value, (current_cut, set(nodes) - current_cut)
