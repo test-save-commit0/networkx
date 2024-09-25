@@ -274,7 +274,11 @@ def maximum_flow_value(flowG, _s, _t, capacity='capacity', flow_func=None,
     True
 
     """
-    pass
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    R = flow_func(flowG, _s, _t, capacity=capacity, value_only=True, **kwargs)
+    return R.graph['flow_value']
 
 
 @nx._dispatchable(graphs='flowG', edge_attrs={'capacity': float('inf')})
