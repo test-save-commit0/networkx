@@ -51,4 +51,40 @@ def voterank(G, number_of_nodes=None):
         Identifying a set of influential spreaders in complex networks.
         Sci. Rep. 6, 27823; doi: 10.1038/srep27823.
     """
-    pass
+    if number_of_nodes is None:
+        number_of_nodes = len(G)
+    elif not 1 <= number_of_nodes <= len(G):
+        raise nx.NetworkXError("Number of nodes must be between 1 and the number of nodes in the graph")
+
+    if len(G) == 0:
+        return []
+
+    voterank = []
+    vote_ability = {v: 1 for v in G}
+    votes = {v: 0 for v in G}
+
+    for _ in range(number_of_nodes):
+        # Reset votes
+        for v in votes:
+            votes[v] = 0
+
+        # Vote
+        for v in G:
+            for u in G.predecessors(v):
+                votes[v] += vote_ability[u]
+
+        # Find the node with the highest vote
+        best_node = max(votes, key=votes.get)
+
+        if votes[best_node] == 0:
+            # No more nodes with positive votes
+            break
+
+        voterank.append(best_node)
+
+        # Update vote ability
+        vote_ability[best_node] = 0
+        for v in G.successors(best_node):
+            vote_ability[v] -= 1 / len(G)
+
+    return voterank
