@@ -59,7 +59,15 @@ def maximum_independent_set(G):
        Approximating maximum independent sets by excluding subgraphs.
        BIT Numerical Mathematics, 32(2), 180–196. Springer.
     """
-    pass
+    independent_set = set()
+    nodes = set(G.nodes())
+
+    while nodes:
+        v = max(nodes, key=lambda x: G.degree(x))
+        independent_set.add(v)
+        nodes -= set(G[v]) | {v}
+
+    return independent_set
 
 
 @not_implemented_for('directed')
@@ -114,7 +122,7 @@ def max_clique(G):
         BIT Numerical Mathematics, 32(2), 180–196. Springer.
         doi:10.1007/BF01994876
     """
-    pass
+    return maximum_independent_set(nx.complement(G))
 
 
 @not_implemented_for('directed')
@@ -154,7 +162,15 @@ def clique_removal(G):
         Approximating maximum independent sets by excluding subgraphs.
         BIT Numerical Mathematics, 32(2), 180–196. Springer.
     """
-    pass
+    H = G.copy()
+    cliques = []
+    independent_set = set()
+    while H:
+        clique = max_clique(H)
+        cliques.append(clique)
+        independent_set.update(ramsey.ramsey_R2(H, len(clique)))
+        H.remove_nodes_from(clique)
+    return independent_set, cliques
 
 
 @not_implemented_for('directed')
@@ -217,4 +233,14 @@ def large_clique_size(G):
         Functions for finding the exact maximum clique in a graph.
 
     """
-    pass
+    nodes = sorted(G, key=G.degree, reverse=True)
+    max_degree = G.degree(nodes[0])
+    
+    clique = set()
+    for v in nodes:
+        if len(clique) > G.degree(v):
+            break
+        if all(G.has_edge(v, u) for u in clique):
+            clique.add(v)
+    
+    return len(clique)
