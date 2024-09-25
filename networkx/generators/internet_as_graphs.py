@@ -17,7 +17,12 @@ def uniform_int_from_avg(a, m, seed):
     X = X1 + X2; X1~U(a,floor(b)), X2~B(p)
     E[X] = E[X1] + E[X2] = (floor(b)+a)/2 + (b-floor(b))/2 = (b+a)/2 = m
     """
-    pass
+    b = 2 * m - a
+    floor_b = int(b)
+    p = (b - floor_b) / 2
+    x1 = seed.randint(a, floor_b)
+    x2 = int(seed.random() < p)
+    return x1 + x2
 
 
 def choose_pref_attach(degs, seed):
