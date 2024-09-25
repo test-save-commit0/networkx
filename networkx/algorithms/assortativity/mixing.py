@@ -43,7 +43,32 @@ def attribute_mixing_dict(G, attribute, nodes=None, normalized=False):
     d : dictionary
        Counts or joint probability of occurrence of attribute pairs.
     """
-    pass
+    if nodes is None:
+        nodes = G.nodes()
+    
+    d = {}
+    node_attr = nx.get_node_attributes(G, attribute)
+    
+    for u, v in G.edges(nodes):
+        u_attr = node_attr[u]
+        v_attr = node_attr[v]
+        
+        if u_attr not in d:
+            d[u_attr] = {}
+        if v_attr not in d:
+            d[v_attr] = {}
+        
+        d[u_attr][v_attr] = d[u_attr].get(v_attr, 0) + 1
+        if u_attr != v_attr:  # Add reverse direction for undirected graphs
+            d[v_attr][u_attr] = d[v_attr].get(u_attr, 0) + 1
+    
+    if normalized:
+        total = sum(sum(d[k].values()) for k in d)
+        for k1 in d:
+            for k2 in d[k1]:
+                d[k1][k2] /= total
+    
+    return d
 
 
 @nx._dispatchable(node_attrs='attribute')
@@ -100,7 +125,29 @@ def attribute_mixing_matrix(G, attribute, nodes=None, mapping=None,
     array([[0.  , 0.25],
            [0.25, 0.5 ]])
     """
-    pass
+    import numpy as np
+    
+    if nodes is None:
+        nodes = G.nodes()
+    
+    if mapping is None:
+        mapping = {val: i for i, val in enumerate(set(nx.get_node_attributes(G, attribute).values()))}
+    
+    num_classes = len(mapping)
+    mat = np.zeros((num_classes, num_classes))
+    
+    for u, v in G.edges(nodes):
+        u_attr = G.nodes[u][attribute]
+        v_attr = G.nodes[v][attribute]
+        i, j = mapping[u_attr], mapping[v_attr]
+        mat[i, j] += 1
+        if i != j:  # Add reverse direction for undirected graphs
+            mat[j, i] += 1
+    
+    if normalized:
+        mat /= mat.sum()
+    
+    return mat
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -132,7 +179,47 @@ def degree_mixing_dict(G, x='out', y='in', weight=None, nodes=None,
     d: dictionary
        Counts or joint probability of occurrence of degree pairs.
     """
-    pass
+    if nodes is None:
+        nodes = G.nodes()
+    
+    d = {}
+    
+    if G.is_directed():
+        if x == 'in':
+            xdeg = G.in_degree
+        elif x == 'out':
+            xdeg = G.out_degree
+        else:
+            raise nx.NetworkXError("x must be 'in' or 'out' for directed graphs.")
+        if y == 'in':
+            ydeg = G.in_degree
+        elif y == 'out':
+            ydeg = G.out_degree
+        else:
+            raise nx.NetworkXError("y must be 'in' or 'out' for directed graphs.")
+    else:
+        xdeg = ydeg = G.degree
+    
+    for u, v in G.edges(nodes):
+        u_deg = xdeg(u, weight=weight)
+        v_deg = ydeg(v, weight=weight)
+        
+        if u_deg not in d:
+            d[u_deg] = {}
+        d[u_deg][v_deg] = d[u_deg].get(v_deg, 0) + 1
+        
+        if not G.is_directed() and u_deg != v_deg:
+            if v_deg not in d:
+                d[v_deg] = {}
+            d[v_deg][u_deg] = d[v_deg].get(u_deg, 0) + 1
+    
+    if normalized:
+        total = sum(sum(d[k].values()) for k in d)
+        for k1 in d:
+            for k2 in d[k1]:
+                d[k1][k2] /= total
+    
+    return d
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -199,7 +286,47 @@ def degree_mixing_matrix(G, x='out', y='in', weight=None, nodes=None,
            [0. , 0. , 0. , 0. ],
            [0. , 0.5, 0. , 0. ]])
     """
-    pass
+    import numpy as np
+    
+    if nodes is None:
+        nodes = G.nodes()
+    
+    if G.is_directed():
+        if x == 'in':
+            xdeg = G.in_degree
+        elif x == 'out':
+            xdeg = G.out_degree
+        else:
+            raise nx.NetworkXError("x must be 'in' or 'out' for directed graphs.")
+        if y == 'in':
+            ydeg = G.in_degree
+        elif y == 'out':
+            ydeg = G.out_degree
+        else:
+            raise nx.NetworkXError("y must be 'in' or 'out' for directed graphs.")
+    else:
+        xdeg = ydeg = G.degree
+    
+    deg_dict = {n: xdeg(n, weight=weight) for n in nodes}
+    
+    if mapping is None:
+        mapping = {deg: i for i, deg in enumerate(sorted(set(deg_dict.values())))}
+    
+    num_degrees = len(mapping)
+    mat = np.zeros((num_degrees, num_degrees))
+    
+    for u, v in G.edges(nodes):
+        u_deg = deg_dict[u]
+        v_deg = ydeg(v, weight=weight)
+        i, j = mapping[u_deg], mapping[v_deg]
+        mat[i, j] += 1
+        if not G.is_directed() and i != j:
+            mat[j, i] += 1
+    
+    if normalized:
+        mat /= mat.sum()
+    
+    return mat
 
 
 def mixing_dict(xy, normalized=False):
@@ -221,4 +348,21 @@ def mixing_dict(xy, normalized=False):
     d: dictionary
        Counts or Joint probability of occurrence of values in xy.
     """
-    pass
+    d = {}
+    for x, y in xy:
+        if x not in d:
+            d[x] = {}
+        if y not in d:
+            d[y] = {}
+        
+        d[x][y] = d[x].get(y, 0) + 1
+        if x != y:
+            d[y][x] = d[y].get(x, 0) + 1
+    
+    if normalized:
+        total = sum(sum(d[k].values()) for k in d)
+        for k1 in d:
+            for k2 in d[k1]:
+                d[k1][k2] /= total
+    
+    return d
