@@ -61,4 +61,43 @@ def chain_decomposition(G, root=None):
        113, 241–244. Elsevier. <https://doi.org/10.1016/j.ipl.2013.01.016>
 
     """
-    pass
+    if root is not None and root not in G:
+        raise nx.NodeNotFound(f"Node {root} is not in the graph.")
+
+    def dfs_edges(node, parent=None):
+        visited.add(node)
+        for neighbor in G[node]:
+            if neighbor not in visited:
+                yield node, neighbor
+                yield from dfs_edges(neighbor, node)
+            elif neighbor != parent and neighbor in visited:
+                yield node, neighbor
+
+    def find_chain(start, end):
+        chain = [start]
+        while chain[-1] != end:
+            for edge in tree_edges:
+                if edge[0] == chain[-1]:
+                    chain.append(edge[1])
+                    break
+                elif edge[1] == chain[-1]:
+                    chain.append(edge[0])
+                    break
+        return list(zip(chain[:-1], chain[1:]))
+
+    if root is None:
+        components = nx.connected_components(G)
+    else:
+        components = [nx.node_connected_component(G, root)]
+
+    for component in components:
+        subgraph = G.subgraph(component)
+        start = next(iter(subgraph))
+        visited = set()
+        tree_edges = list(dfs_edges(start))
+        non_tree_edges = set(subgraph.edges()) - set(tree_edges)
+
+        for u, v in non_tree_edges:
+            chain = find_chain(u, v)
+            chain.append((u, v))
+            yield chain
