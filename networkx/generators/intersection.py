@@ -37,7 +37,13 @@ def uniform_random_intersection_graph(n, m, p, seed=None):
        An equivalence theorem relating the evolution of the g(n, m, p)
        and g(n, p) models. Random Struct. Algorithms 16, 2 (2000), 156–176.
     """
-    pass
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+    for node in range(n):
+        for attribute in range(m):
+            if seed.random() < p:
+                G.add_edge(node, f"attr_{attribute}")
+    return nx.projected_graph(G, range(n))
 
 
 @py_random_state(3)
@@ -68,7 +74,14 @@ def k_random_intersection_graph(n, m, k, seed=None):
        Two models of random intersection graphs and their applications.
        Electronic Notes in Discrete Mathematics 10 (2001), 129--132.
     """
-    pass
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+    attributes = list(range(m))
+    for node in range(n):
+        node_attributes = seed.sample(attributes, k)
+        for attr in node_attributes:
+            G.add_edge(node, f"attr_{attr}")
+    return nx.projected_graph(G, range(n))
 
 
 @py_random_state(3)
@@ -101,4 +114,13 @@ def general_random_intersection_graph(n, m, p, seed=None):
        J. Karhum¨aki, A. Lepist¨o, and D. Sannella, Eds., vol. 3142
        of Lecture Notes in Computer Science, Springer, pp. 1029–1040.
     """
-    pass
+    if len(p) != m:
+        raise nx.NetworkXError("Length of p must be equal to m")
+    
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+    for node in range(n):
+        for attribute, prob in enumerate(p):
+            if seed.random() < prob:
+                G.add_edge(node, f"attr_{attribute}")
+    return nx.projected_graph(G, range(n))
