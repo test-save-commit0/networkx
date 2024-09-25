@@ -46,7 +46,27 @@ def cytoscape_data(G, name='name', ident='id'):
        {'data': {'id': '1', 'value': 1, 'name': '1'}}],
       'edges': [{'data': {'source': 0, 'target': 1}}]}}
     """
-    pass
+    if name == ident:
+        raise nx.NetworkXError("name and ident must be different")
+
+    data = {
+        "data": [],
+        "directed": G.is_directed(),
+        "multigraph": G.is_multigraph(),
+        "elements": {"nodes": [], "edges": []}
+    }
+
+    for node, node_data in G.nodes(data=True):
+        node_dict = {"data": {ident: str(node), name: str(node)}}
+        node_dict["data"].update((k, v) for k, v in node_data.items() if k != name and k != ident)
+        data["elements"]["nodes"].append(node_dict)
+
+    for u, v, edge_data in G.edges(data=True):
+        edge_dict = {"data": {"source": str(u), "target": str(v)}}
+        edge_dict["data"].update(edge_data)
+        data["elements"]["edges"].append(edge_dict)
+
+    return data
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -109,4 +129,25 @@ def cytoscape_graph(data, name='name', ident='id'):
     >>> G.edges(data=True)
     EdgeDataView([(0, 1, {'source': 0, 'target': 1})])
     """
-    pass
+    if name == ident:
+        raise nx.NetworkXError("name and ident must be different")
+
+    if data.get("directed", False):
+        graph = nx.DiGraph() if not data.get("multigraph", False) else nx.MultiDiGraph()
+    else:
+        graph = nx.Graph() if not data.get("multigraph", False) else nx.MultiGraph()
+
+    graph.graph = data.get("data", {})
+
+    for node_data in data["elements"]["nodes"]:
+        node_attrs = node_data["data"].copy()
+        node_id = node_attrs.pop(ident)
+        graph.add_node(node_id, **node_attrs)
+
+    for edge_data in data["elements"]["edges"]:
+        edge_attrs = edge_data["data"].copy()
+        source = edge_attrs.pop("source")
+        target = edge_attrs.pop("target")
+        graph.add_edge(source, target, **edge_attrs)
+
+    return graph
