@@ -14,7 +14,14 @@ def _neighborhood_aggregate(G, node, node_labels, edge_attr=None):
     Compute new labels for given node by aggregating
     the labels of each node's neighbors.
     """
-    pass
+    label = []
+    for neighbor in G[node]:
+        if edge_attr is None:
+            label.append(node_labels[neighbor])
+        else:
+            edge_label = G[node][neighbor].get(edge_attr, "")
+            label.append(f"{edge_label}{node_labels[neighbor]}")
+    return "".join(sorted(label))
 
 
 @nx._dispatchable(edge_attrs={'edge_attr': None}, node_attrs='node_attr')
@@ -112,7 +119,22 @@ def weisfeiler_lehman_graph_hash(G, edge_attr=None, node_attr=None,
     --------
     weisfeiler_lehman_subgraph_hashes
     """
-    pass
+    if node_attr is None and edge_attr is None:
+        node_labels = {node: str(G.degree(node)) for node in G}
+    elif node_attr is not None:
+        node_labels = {node: str(G.nodes[node].get(node_attr, "")) for node in G}
+    else:
+        node_labels = {node: "" for node in G}
+
+    for _ in range(iterations):
+        new_labels = {}
+        for node in G:
+            neighborhood_label = _neighborhood_aggregate(G, node, node_labels, edge_attr)
+            new_labels[node] = blake2b(neighborhood_label.encode(), digest_size=digest_size).hexdigest()
+        node_labels = new_labels
+
+    label_histogram = Counter(node_labels.values())
+    return blake2b(str(sorted(label_histogram.items())).encode(), digest_size=digest_size).hexdigest()
 
 
 @nx._dispatchable(edge_attrs={'edge_attr': None}, node_attrs='node_attr')
@@ -238,4 +260,27 @@ def weisfeiler_lehman_subgraph_hashes(G, edge_attr=None, node_attr=None,
     --------
     weisfeiler_lehman_graph_hash
     """
-    pass
+    if node_attr is None and edge_attr is None:
+        node_labels = {node: str(G.degree(node)) for node in G}
+    elif node_attr is not None:
+        node_labels = {node: str(G.nodes[node].get(node_attr, "")) for node in G}
+    else:
+        node_labels = {node: "" for node in G}
+
+    node_subgraph_hashes = {node: [] for node in G}
+
+    if include_initial_labels:
+        for node in G:
+            initial_hash = blake2b(node_labels[node].encode(), digest_size=digest_size).hexdigest()
+            node_subgraph_hashes[node].append(initial_hash)
+
+    for _ in range(iterations):
+        new_labels = {}
+        for node in G:
+            neighborhood_label = _neighborhood_aggregate(G, node, node_labels, edge_attr)
+            new_hash = blake2b(neighborhood_label.encode(), digest_size=digest_size).hexdigest()
+            new_labels[node] = new_hash
+            node_subgraph_hashes[node].append(new_hash)
+        node_labels = new_labels
+
+    return node_subgraph_hashes
