@@ -110,7 +110,11 @@ def line_graph(G, create_using=None):
       Academic Press Inc., pp. 271--305.
 
     """
-    pass
+    if G.is_directed():
+        L = _lg_directed(G, create_using=create_using)
+    else:
+        L = _lg_undirected(G, selfloops=False, create_using=create_using)
+    return L
 
 
 def _lg_directed(G, create_using=None):
@@ -129,7 +133,38 @@ def _lg_directed(G, create_using=None):
        Default is to use the same graph class as `G`.
 
     """
-    pass
+    L = nx.empty_graph(0, create_using, default=G.__class__)
+
+    for from_node in G:
+        for to_node in G[from_node]:
+            if G.is_multigraph():
+                for key in G[from_node][to_node]:
+                    L.add_node((from_node, to_node, key))
+            else:
+                L.add_node((from_node, to_node))
+
+    for from_node in G:
+        for to_node in G[from_node]:
+            if G.is_multigraph():
+                for key in G[from_node][to_node]:
+                    for next_node in G[to_node]:
+                        if G.is_multigraph():
+                            for next_key in G[to_node][next_node]:
+                                L.add_edge((from_node, to_node, key),
+                                           (to_node, next_node, next_key))
+                        else:
+                            L.add_edge((from_node, to_node, key),
+                                       (to_node, next_node))
+            else:
+                for next_node in G[to_node]:
+                    if G.is_multigraph():
+                        for next_key in G[to_node][next_node]:
+                            L.add_edge((from_node, to_node),
+                                       (to_node, next_node, next_key))
+                    else:
+                        L.add_edge((from_node, to_node),
+                                   (to_node, next_node))
+    return L
 
 
 def _lg_undirected(G, selfloops=False, create_using=None):
@@ -156,7 +191,41 @@ def _lg_undirected(G, selfloops=False, create_using=None):
     produce self-loops.
 
     """
-    pass
+    L = nx.empty_graph(0, create_using, default=G.__class__)
+
+    for u, v, data in G.edges(data=True):
+        # Sort nodes to canonicalize
+        (u, v) = sorted([u, v])
+        if G.is_multigraph():
+            key = data.get('key', None)
+            node = (u, v, key)
+        else:
+            node = (u, v)
+        L.add_node(node)
+
+    for u in G:
+        for v, w in combinations(G[u], 2):
+            if G.is_multigraph():
+                for key1 in G[u][v]:
+                    for key2 in G[u][w]:
+                        node1 = tuple(sorted([u, v]) + [key1])
+                        node2 = tuple(sorted([u, w]) + [key2])
+                        L.add_edge(node1, node2)
+            else:
+                node1 = tuple(sorted([u, v]))
+                node2 = tuple(sorted([u, w]))
+                L.add_edge(node1, node2)
+
+    if selfloops and G.number_of_selfloops() > 0:
+        for u, v, data in G.selfloop_edges(data=True):
+            if G.is_multigraph():
+                key = data.get('key', None)
+                node = (u, u, key)
+            else:
+                node = (u, u)
+            L.add_node(node)
+
+    return L
 
 
 @not_implemented_for('directed')
@@ -212,12 +281,28 @@ def inverse_line_graph(G):
        `DOI link <https://doi.org/10.1016/0020-0190(73)90029-X>`_
 
     """
-    pass
+    if len(G) == 0:
+        return nx.Graph()
+
+    starting_cell = _select_starting_cell(G)
+    P = _find_partition(G, starting_cell)
+
+    H = nx.Graph()
+    for cell in P:
+        if len(cell) == 1:
+            H.add_node(cell[0])
+        elif len(cell) == 2:
+            H.add_edge(*cell)
+        else:
+            raise nx.NetworkXError("G is not a line graph")
+
+    return H
 
 
 def _triangles(G, e):
     """Return list of all triangles containing edge e"""
-    pass
+    u, v = e
+    return [(u, v, w) for w in set(G[u]) & set(G[v])]
 
 
 def _odd_triangle(G, T):
@@ -245,7 +330,15 @@ def _odd_triangle(G, T):
     triangle.
 
     """
-    pass
+    if not nx.is_triangle(G, T):
+        raise nx.NetworkXError("T is not a triangle in G")
+
+    for v in G:
+        if v not in T:
+            adj = sum(1 for u in T if v in G[u])
+            if adj == 1 or adj == 3:
+                return True
+    return False
 
 
 def _find_partition(G, starting_cell):
@@ -265,7 +358,17 @@ def _find_partition(G, starting_cell):
     NetworkXError
         If a cell is not a complete subgraph then G is not a line graph
     """
-    pass
+    cells = [starting_cell]
+    for cell in cells:
+        for v in G:
+            if v not in cell:
+                if all(v in G[u] for u in cell):
+                    cells.append(tuple(list(cell) + [v]))
+
+    if not all(nx.is_clique(G, cell) for cell in cells):
+        raise nx.NetworkXError("G is not a line graph")
+
+    return cells
 
 
 def _select_starting_cell(G, starting_edge=None):
@@ -292,4 +395,27 @@ def _select_starting_cell(G, starting_edge=None):
     specific starting edge. Note that the r, s notation for counting
     triangles is the same as in the Roussopoulos paper cited above.
     """
-    pass
+    if starting_edge is None:
+        e = arbitrary_element(G.edges())
+    else:
+        e = starting_edge
+
+    r = len(_triangles(G, e))
+    s = len(set(_triangles(G, e)))
+
+    if r == 0:
+        return e
+    elif r == 1:
+        triangle = _triangles(G, e)[0]
+        if _odd_triangle(G, triangle):
+            return triangle
+        else:
+            return e
+    elif r == s:
+        return e
+    else:
+        for triangle in _triangles(G, e):
+            if not _odd_triangle(G, triangle):
+                return _select_starting_cell(G, (triangle[0], triangle[1]))
+    
+    raise nx.NetworkXError("G is not a line graph")
