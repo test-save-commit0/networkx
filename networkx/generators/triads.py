@@ -63,4 +63,13 @@ def triad_graph(triad_name):
     triadic_census
 
     """
-    pass
+    if triad_name not in TRIAD_EDGES:
+        raise ValueError(f"'{triad_name}' is not a valid triad name")
+    
+    G = DiGraph()
+    G.add_nodes_from(['a', 'b', 'c'])
+    
+    for edge in TRIAD_EDGES[triad_name]:
+        G.add_edge(edge[0], edge[1])
+    
+    return G
