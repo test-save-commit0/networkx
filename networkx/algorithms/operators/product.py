@@ -58,7 +58,24 @@ def tensor_product(G, H):
     Edge attributes and edge keys (for multigraphs) are also copied to the
     new product graph
     """
-    pass
+    if G.is_directed() != H.is_directed():
+        raise nx.NetworkXError("G and H must be both directed or both undirected.")
+    
+    GH = nx.Graph()
+    if G.is_multigraph() or H.is_multigraph():
+        GH = nx.MultiGraph()
+    if G.is_directed():
+        GH = nx.DiGraph()
+        if G.is_multigraph() or H.is_multigraph():
+            GH = nx.MultiDiGraph()
+
+    GH.add_nodes_from((n1, n2) for n1 in G for n2 in H)
+
+    for e1 in G.edges(data=True):
+        for e2 in H.edges(data=True):
+            GH.add_edge((e1[0], e2[0]), (e1[1], e2[1]), **{**e1[2], **e2[2]})
+
+    return GH
 
 
 @nx._dispatchable(graphs=_G_H, preserve_node_attrs=True, returns_graph=True)
@@ -106,7 +123,28 @@ def cartesian_product(G, H):
     Edge attributes and edge keys (for multigraphs) are also copied to the
     new product graph
     """
-    pass
+    if G.is_directed() != H.is_directed():
+        raise nx.NetworkXError("G and H must be both directed or both undirected.")
+    
+    GH = nx.Graph()
+    if G.is_multigraph() or H.is_multigraph():
+        GH = nx.MultiGraph()
+    if G.is_directed():
+        GH = nx.DiGraph()
+        if G.is_multigraph() or H.is_multigraph():
+            GH = nx.MultiDiGraph()
+
+    GH.add_nodes_from((n1, n2) for n1 in G for n2 in H)
+
+    for n1 in G:
+        for e2 in H.edges(data=True):
+            GH.add_edge((n1, e2[0]), (n1, e2[1]), **e2[2])
+
+    for e1 in G.edges(data=True):
+        for n2 in H:
+            GH.add_edge((e1[0], n2), (e1[1], n2), **e1[2])
+
+    return GH
 
 
 @nx._dispatchable(graphs=_G_H, preserve_node_attrs=True, returns_graph=True)
@@ -153,7 +191,29 @@ def lexicographic_product(G, H):
     Edge attributes and edge keys (for multigraphs) are also copied to the
     new product graph
     """
-    pass
+    if G.is_directed() != H.is_directed():
+        raise nx.NetworkXError("G and H must be both directed or both undirected.")
+    
+    GH = nx.Graph()
+    if G.is_multigraph() or H.is_multigraph():
+        GH = nx.MultiGraph()
+    if G.is_directed():
+        GH = nx.DiGraph()
+        if G.is_multigraph() or H.is_multigraph():
+            GH = nx.MultiDiGraph()
+
+    GH.add_nodes_from((n1, n2) for n1 in G for n2 in H)
+
+    for e1 in G.edges(data=True):
+        for n2 in H:
+            for n2_prime in H:
+                GH.add_edge((e1[0], n2), (e1[1], n2_prime), **e1[2])
+
+    for n1 in G:
+        for e2 in H.edges(data=True):
+            GH.add_edge((n1, e2[0]), (n1, e2[1]), **e2[2])
+
+    return GH
 
 
 @nx._dispatchable(graphs=_G_H, preserve_node_attrs=True, returns_graph=True)
@@ -202,7 +262,35 @@ def strong_product(G, H):
     Edge attributes and edge keys (for multigraphs) are also copied to the
     new product graph
     """
-    pass
+    if G.is_directed() != H.is_directed():
+        raise nx.NetworkXError("G and H must be both directed or both undirected.")
+    
+    GH = nx.Graph()
+    if G.is_multigraph() or H.is_multigraph():
+        GH = nx.MultiGraph()
+    if G.is_directed():
+        GH = nx.DiGraph()
+        if G.is_multigraph() or H.is_multigraph():
+            GH = nx.MultiDiGraph()
+
+    GH.add_nodes_from((n1, n2) for n1 in G for n2 in H)
+
+    # Edges from G
+    for e1 in G.edges(data=True):
+        for n2 in H:
+            GH.add_edge((e1[0], n2), (e1[1], n2), **e1[2])
+
+    # Edges from H
+    for n1 in G:
+        for e2 in H.edges(data=True):
+            GH.add_edge((n1, e2[0]), (n1, e2[1]), **e2[2])
+
+    # Diagonal edges
+    for e1 in G.edges(data=True):
+        for e2 in H.edges(data=True):
+            GH.add_edge((e1[0], e2[0]), (e1[1], e2[1]), **{**e1[2], **e2[2]})
+
+    return GH
 
 
 @not_implemented_for('directed')
@@ -270,7 +358,26 @@ def power(G, k):
     *Graph Theory* by Bondy and Murty [1]_.
 
     """
-    pass
+    if not isinstance(k, int) or k <= 0:
+        raise ValueError("k must be a positive integer")
+    
+    if not G.is_directed() and not G.is_multigraph():
+        H = G.copy()
+        
+        for _ in range(k - 1):
+            edges_to_add = []
+            for node in H:
+                neighbors = set(H.neighbors(node))
+                for neighbor in list(neighbors):
+                    neighbors.update(H.neighbors(neighbor))
+                neighbors.discard(node)
+                edges_to_add.extend((node, v) for v in neighbors)
+            
+            H.add_edges_from(edges_to_add)
+        
+        return H
+    else:
+        raise nx.NetworkXNotImplemented("Graph must be undirected and simple.")
 
 
 @not_implemented_for('multigraph')
@@ -300,7 +407,31 @@ def rooted_product(G, H, root):
     The nodes of R are the Cartesian Product of the nodes of G and H.
     The nodes of G and H are not relabeled.
     """
-    pass
+    if root not in H:
+        raise nx.NetworkXError("root is not a node of H")
+
+    R = nx.Graph()
+    
+    if G.is_directed() and H.is_directed():
+        R = nx.DiGraph()
+    elif G.is_multigraph() or H.is_multigraph():
+        R = nx.MultiGraph()
+        if G.is_directed() and H.is_directed():
+            R = nx.MultiDiGraph()
+
+    # Add nodes
+    R.add_nodes_from((g, h) for g in G for h in H)
+
+    # Add edges within each copy of H
+    for g in G:
+        for e in H.edges(data=True):
+            R.add_edge((g, e[0]), (g, e[1]), **e[2])
+
+    # Add edges between copies of H
+    for e in G.edges(data=True):
+        R.add_edge((e[0], root), (e[1], root), **e[2])
+
+    return R
 
 
 @not_implemented_for('directed')
@@ -349,7 +480,20 @@ def corona_product(G, H):
     [2] A. Faraji, "Corona Product in Graph Theory," Ali Faraji, May 11, 2021.
         https://blog.alifaraji.ir/math/graph-theory/corona-product.html (accessed Dec. 07, 2021).
     """
-    pass
+    if G.is_directed() != H.is_directed():
+        raise nx.NetworkXError("G and H must be both directed or both undirected.")
+
+    C = G.copy()
+
+    for v in G:
+        # Add a copy of H for each node in G
+        C.add_nodes_from((v, w) for w in H)
+        C.add_edges_from(((v, w1), (v, w2)) for w1, w2 in H.edges())
+
+        # Connect v to every node in its copy of H
+        C.add_edges_from((v, (v, w)) for w in H)
+
+    return C
 
 
 @nx._dispatchable(graphs=_G_H, preserve_edge_attrs=True,
@@ -418,4 +562,20 @@ def modular_product(G, H):
         entrance to the task of finding the nondensity of a graph." Proc. Third
         All-Union Conference on Problems of Theoretical Cybernetics. 1974.
     """
-    pass
+    if G.is_multigraph() or H.is_multigraph():
+        raise nx.NetworkXNotImplemented("G and H must be simple graphs.")
+
+    M = nx.Graph()
+
+    M.add_nodes_from((g, h) for g in G for h in H)
+
+    for (u, v) in M.nodes():
+        for (x, y) in M.nodes():
+            if (u, v) != (x, y):
+                if ((u == x and v != y) or (u != x and v == y)):
+                    continue
+                if ((G.has_edge(u, x) and H.has_edge(v, y)) or
+                    (not G.has_edge(u, x) and not H.has_edge(v, y))):
+                    M.add_edge((u, v), (x, y))
+
+    return M
