@@ -98,7 +98,44 @@ def k_components(G, flow_func=None):
             https://arxiv.org/pdf/1503.04476v1
 
     """
-    pass
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    # First, we need to compute the node connectivity of the graph
+    k = nx.node_connectivity(G, flow_func=flow_func)
+    
+    # Initialize the k_components dictionary
+    k_comps = {i: [] for i in range(1, k + 1)}
+    
+    # For k=1, all nodes in a connected component form a 1-component
+    k_comps[1] = list(nx.connected_components(G))
+    
+    # For k >= 2, we use the algorithm described in the docstring
+    for i in range(2, k + 1):
+        # Find all i-cutsets
+        cutsets = list(nx.all_node_cuts(G, k=i, flow_func=flow_func))
+        
+        # If no cutsets are found, all nodes form a single i-component
+        if not cutsets:
+            k_comps[i] = [set(G.nodes())]
+            continue
+        
+        # Generate new graph components based on the removal of cutsets
+        components = []
+        for cutset in cutsets:
+            H = G.copy()
+            H.remove_nodes_from(cutset)
+            components.extend(nx.connected_components(H))
+        
+        # Add cutset nodes to all adjacent components
+        for component in components:
+            for node in list(component):
+                component.update(G.neighbors(node))
+        
+        # Remove duplicate components and add to k_comps
+        k_comps[i] = list(_consolidate(components, i))
+    
+    return k_comps
 
 
 def _consolidate(sets, k):
@@ -113,4 +150,23 @@ def _consolidate(sets, k):
     is no licence for the code.
 
     """
-    pass
+    G = nx.Graph()
+    set_nodes = []
+    for i, s in enumerate(sets):
+        set_node = f"set_{i}"
+        G.add_node(set_node, set=s)
+        set_nodes.append(set_node)
+        for n in s:
+            G.add_edge(set_node, n)
+
+    consolidated = []
+    for cc in nx.connected_components(G):
+        component_sets = [G.nodes[n]['set'] for n in cc if n.startswith('set_')]
+        if len(component_sets) > 1:
+            new_set = set.union(*component_sets)
+            if len(new_set) >= k:
+                consolidated.append(new_set)
+        elif len(component_sets) == 1:
+            consolidated.append(component_sets[0])
+
+    return consolidated
