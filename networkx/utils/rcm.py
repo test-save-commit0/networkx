@@ -61,7 +61,28 @@ def cuthill_mckee_ordering(G, heuristic=None):
     .. [2]  Steven S. Skiena. 1997. The Algorithm Design Manual.
        Springer-Verlag New York, Inc., New York, NY, USA.
     """
-    pass
+    if heuristic is None:
+        start = find_pseudo_peripheral_node(G)
+    else:
+        start = heuristic(G)
+
+    visited = {start}
+    queue = deque([start])
+    while queue:
+        parent = queue.popleft()
+        yield parent
+        new_nodes = set(G[parent]) - visited
+        sorted_nodes = sorted(new_nodes, key=lambda n: G.degree(n))
+        queue.extend(sorted_nodes)
+        visited.update(new_nodes)
+
+def find_pseudo_peripheral_node(G):
+    u = arbitrary_element(G)
+    for _ in range(2):
+        l = dict(nx.shortest_path_length(G, u))
+        farthest = max(l, key=l.get)
+        u = farthest
+    return u
 
 
 def reverse_cuthill_mckee_ordering(G, heuristic=None):
@@ -117,4 +138,5 @@ def reverse_cuthill_mckee_ordering(G, heuristic=None):
     .. [2]  Steven S. Skiena. 1997. The Algorithm Design Manual.
        Springer-Verlag New York, Inc., New York, NY, USA.
     """
-    pass
+    for node in reversed(list(cuthill_mckee_ordering(G, heuristic))):
+        yield node
