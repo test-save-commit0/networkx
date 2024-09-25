@@ -127,7 +127,12 @@ def are_all_equal(iterable):
         ``True`` iff all elements in `iterable` compare equal, ``False``
         otherwise.
     """
-    pass
+    iterator = iter(iterable)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return True
+    return all(first == item for item in iterator)
 
 
 def make_partitions(items, test):
@@ -156,7 +161,15 @@ def make_partitions(items, test):
     The function `test` is assumed to be transitive: if ``test(a, b)`` and
     ``test(b, c)`` return ``True``, then ``test(a, c)`` must also be ``True``.
     """
-    pass
+    partitions = []
+    for item in items:
+        for partition in partitions:
+            if test(next(iter(partition)), item):
+                partition.add(item)
+                break
+        else:
+            partitions.append({item})
+    return partitions
 
 
 def partition_to_color(partitions):
@@ -173,7 +186,7 @@ def partition_to_color(partitions):
     -------
     dict
     """
-    pass
+    return {item: idx for idx, partition in enumerate(partitions) for item in partition}
 
 
 def intersect(collection_of_sets):
@@ -191,7 +204,9 @@ def intersect(collection_of_sets):
         An intersection of all sets in `collection_of_sets`. Will have the same
         type as the item initially taken from `collection_of_sets`.
     """
-    pass
+    if not collection_of_sets:
+        return set()
+    return set.intersection(*collection_of_sets)
 
 
 class ISMAGS:
