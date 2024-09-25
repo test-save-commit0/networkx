@@ -45,7 +45,26 @@ def attach(module_name, submodules=None, submod_attrs=None):
     __getattr__, __dir__, __all__
 
     """
-    pass
+    if submodules is None:
+        submodules = set()
+    if submod_attrs is None:
+        submod_attrs = {}
+
+    def __getattr__(name):
+        if name in submodules:
+            return importlib.import_module(f"{module_name}.{name}")
+        for submod, attrs in submod_attrs.items():
+            if name in attrs:
+                module = importlib.import_module(f"{module_name}.{submod}")
+                return getattr(module, name)
+        raise AttributeError(f"Module '{module_name}' has no attribute '{name}'")
+
+    def __dir__():
+        return list(set(submodules) | set(attr for attrs in submod_attrs.values() for attr in attrs))
+
+    __all__ = list(submodules) + [attr for attrs in submod_attrs.values() for attr in attrs]
+
+    return __getattr__, __dir__, __all__
 
 
 class DelayedImportErrorModule(types.ModuleType):
@@ -129,4 +148,13 @@ def _lazy_import(fullname):
         Actual loading of the module occurs upon first attribute request.
 
     """
-    pass
+    spec = importlib.util.find_spec(fullname)
+    if spec is None:
+        raise ImportError(f"No module named '{fullname}'")
+
+    loader = importlib.util.LazyLoader(spec.loader)
+    spec.loader = loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[fullname] = module
+    loader.exec_module(module)
+    return module
