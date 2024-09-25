@@ -65,4 +65,41 @@ def min_weighted_vertex_cover(G, weight=None):
        <http://www.cs.technion.ac.il/~reuven/PDF/vc_lr.pdf>
 
     """
-    pass
+    import heapq
+
+    # If no weight is provided, use unit weights
+    if weight is None:
+        weight_func = lambda node: 1
+    else:
+        weight_func = lambda node: G.nodes[node].get(weight, 1)
+
+    # Create a max heap of edges based on the sum of node weights
+    edge_heap = [
+        (-weight_func(u) - weight_func(v), (u, v))
+        for u, v in G.edges()
+    ]
+    heapq.heapify(edge_heap)
+
+    # Initialize the vertex cover and node costs
+    vertex_cover = set()
+    node_costs = {node: weight_func(node) for node in G.nodes()}
+
+    while edge_heap and any(node_costs.values()):
+        # Get the edge with the maximum weight
+        _, (u, v) = heapq.heappop(edge_heap)
+
+        # If either node has zero cost, skip this edge
+        if node_costs[u] == 0 or node_costs[v] == 0:
+            continue
+
+        # Add both nodes to the vertex cover
+        vertex_cover.update([u, v])
+
+        # Reduce the costs of adjacent nodes
+        cost = min(node_costs[u], node_costs[v])
+        for node in [u, v]:
+            for neighbor in G.neighbors(node):
+                if neighbor in node_costs:
+                    node_costs[neighbor] = max(0, node_costs[neighbor] - cost)
+
+    return vertex_cover
