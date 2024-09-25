@@ -48,4 +48,26 @@ def min_edge_cover(G, matching_algorithm=None):
     is bounded by the worst-case running time of the function
     ``matching_algorithm``.
     """
-    pass
+    if matching_algorithm is None:
+        matching_algorithm = hopcroft_karp_matching
+
+    # Find a maximum matching
+    matching = matching_algorithm(G)
+    
+    # Create a set to store the edge cover
+    edge_cover = set()
+
+    # Add all edges from the matching to the edge cover
+    for u, v in matching.items():
+        edge_cover.add((u, v))
+        edge_cover.add((v, u))  # Add both directions
+
+    # For any unmatched nodes, add an edge to any neighbor
+    for node in G.nodes():
+        if node not in matching:
+            for neighbor in G.neighbors(node):
+                edge_cover.add((node, neighbor))
+                edge_cover.add((neighbor, node))  # Add both directions
+                break  # We only need one edge for this node
+
+    return edge_cover
