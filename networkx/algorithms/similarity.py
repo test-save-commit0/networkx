@@ -164,7 +164,46 @@ def graph_edit_distance(G1, G2, node_match=None, edge_match=None,
        https://hal.archives-ouvertes.fr/hal-01168816
 
     """
-    pass
+    from networkx.algorithms.similarity import optimize_graph_edit_distance
+
+    # Set default costs
+    if node_subst_cost is None:
+        if node_match is None:
+            node_subst_cost = lambda n1, n2: 0
+        else:
+            node_subst_cost = lambda n1, n2: int(not node_match(n1, n2))
+    if node_del_cost is None:
+        node_del_cost = lambda n: 1
+    if node_ins_cost is None:
+        node_ins_cost = lambda n: 1
+    
+    if edge_subst_cost is None:
+        if edge_match is None:
+            edge_subst_cost = lambda e1, e2: 0
+        else:
+            edge_subst_cost = lambda e1, e2: int(not edge_match(e1, e2))
+    if edge_del_cost is None:
+        edge_del_cost = lambda e: 1
+    if edge_ins_cost is None:
+        edge_ins_cost = lambda e: 1
+
+    # Use optimize_graph_edit_distance to compute GED
+    for cost in optimize_graph_edit_distance(
+        G1, G2,
+        node_subst_cost=node_subst_cost,
+        node_del_cost=node_del_cost,
+        node_ins_cost=node_ins_cost,
+        edge_subst_cost=edge_subst_cost,
+        edge_del_cost=edge_del_cost,
+        edge_ins_cost=edge_ins_cost,
+        roots=roots,
+        upper_bound=upper_bound,
+        timeout=timeout
+    ):
+        # Return the last (best) cost found
+        best_cost = cost
+
+    return best_cost
 
 
 @nx._dispatchable(graphs={'G1': 0, 'G2': 1})
@@ -306,7 +345,50 @@ def optimal_edit_paths(G1, G2, node_match=None, edge_match=None,
        https://hal.archives-ouvertes.fr/hal-01168816
 
     """
-    pass
+    from networkx.algorithms.similarity import optimize_edit_paths
+
+    # Set default costs
+    if node_subst_cost is None:
+        if node_match is None:
+            node_subst_cost = lambda n1, n2: 0
+        else:
+            node_subst_cost = lambda n1, n2: int(not node_match(n1, n2))
+    if node_del_cost is None:
+        node_del_cost = lambda n: 1
+    if node_ins_cost is None:
+        node_ins_cost = lambda n: 1
+    
+    if edge_subst_cost is None:
+        if edge_match is None:
+            edge_subst_cost = lambda e1, e2: 0
+        else:
+            edge_subst_cost = lambda e1, e2: int(not edge_match(e1, e2))
+    if edge_del_cost is None:
+        edge_del_cost = lambda e: 1
+    if edge_ins_cost is None:
+        edge_ins_cost = lambda e: 1
+
+    # Use optimize_edit_paths to compute optimal edit paths
+    best_paths = []
+    best_cost = float('inf')
+
+    for node_edit_path, edge_edit_path, cost in optimize_edit_paths(
+        G1, G2,
+        node_subst_cost=node_subst_cost,
+        node_del_cost=node_del_cost,
+        node_ins_cost=node_ins_cost,
+        edge_subst_cost=edge_subst_cost,
+        edge_del_cost=edge_del_cost,
+        edge_ins_cost=edge_ins_cost,
+        upper_bound=upper_bound
+    ):
+        if cost < best_cost:
+            best_paths = [(node_edit_path, edge_edit_path)]
+            best_cost = cost
+        elif cost == best_cost:
+            best_paths.append((node_edit_path, edge_edit_path))
+
+    return best_paths, best_cost
 
 
 @nx._dispatchable(graphs={'G1': 0, 'G2': 1})
@@ -434,7 +516,41 @@ def optimize_graph_edit_distance(G1, G2, node_match=None, edge_match=None,
        <10.5220/0005209202710278>. <hal-01168816>
        https://hal.archives-ouvertes.fr/hal-01168816
     """
-    pass
+    from networkx.algorithms.similarity import optimize_edit_paths
+
+    # Set default costs
+    if node_subst_cost is None:
+        if node_match is None:
+            node_subst_cost = lambda n1, n2: 0
+        else:
+            node_subst_cost = lambda n1, n2: int(not node_match(n1, n2))
+    if node_del_cost is None:
+        node_del_cost = lambda n: 1
+    if node_ins_cost is None:
+        node_ins_cost = lambda n: 1
+    
+    if edge_subst_cost is None:
+        if edge_match is None:
+            edge_subst_cost = lambda e1, e2: 0
+        else:
+            edge_subst_cost = lambda e1, e2: int(not edge_match(e1, e2))
+    if edge_del_cost is None:
+        edge_del_cost = lambda e: 1
+    if edge_ins_cost is None:
+        edge_ins_cost = lambda e: 1
+
+    # Use optimize_edit_paths to generate consecutive approximations
+    for _, _, cost in optimize_edit_paths(
+        G1, G2,
+        node_subst_cost=node_subst_cost,
+        node_del_cost=node_del_cost,
+        node_ins_cost=node_ins_cost,
+        edge_subst_cost=edge_subst_cost,
+        edge_del_cost=edge_del_cost,
+        edge_ins_cost=edge_ins_cost,
+        upper_bound=upper_bound
+    ):
+        yield cost
 
 
 @nx._dispatchable(graphs={'G1': 0, 'G2': 1}, preserve_edge_attrs=True,
@@ -683,7 +799,46 @@ def simrank_similarity(G, source=None, target=None, importance_factor=0.9,
            International Conference on Knowledge Discovery and Data Mining,
            pp. 538--543. ACM Press, 2002.
     """
-    pass
+    import numpy as np
+    from itertools import product
+
+    if source is not None and source not in G:
+        raise nx.NodeNotFound(f"Source node {source} is not in G")
+    if target is not None and target not in G:
+        raise nx.NodeNotFound(f"Target node {target} is not in G")
+
+    nodes = list(G.nodes())
+    node_indices = {node: i for i, node in enumerate(nodes)}
+    n = len(nodes)
+
+    sim_prev = np.zeros((n, n))
+    sim = np.identity(n)
+
+    for _ in range(max_iterations):
+        if np.allclose(sim, sim_prev, atol=tolerance):
+            break
+        sim_prev = sim.copy()
+        for u, v in product(range(n), repeat=2):
+            if u == v:
+                continue
+            u_nb = list(G.predecessors(nodes[u]))
+            v_nb = list(G.predecessors(nodes[v]))
+            if not u_nb or not v_nb:
+                sim[u][v] = 0
+            else:
+                s = sum(sim_prev[node_indices[w]][node_indices[x]]
+                        for w, x in product(u_nb, v_nb))
+                sim[u][v] = (importance_factor * s) / (len(u_nb) * len(v_nb))
+    else:
+        raise nx.ExceededMaxIterations(max_iterations)
+
+    if source is not None:
+        if target is not None:
+            return sim[node_indices[source]][node_indices[target]]
+        else:
+            return {v: sim[node_indices[source]][node_indices[v]] for v in nodes}
+    else:
+        return {u: {v: sim[node_indices[u]][node_indices[v]] for v in nodes} for u in nodes}
 
 
 def _simrank_similarity_python(G, source=None, target=None,
@@ -840,7 +995,40 @@ def panther_similarity(G, source, k=5, path_length=5, c=0.5, delta=0.1, eps
            on Knowledge Discovery and Data Mining (Vol. 2015-August, pp. 1445–1454).
            Association for Computing Machinery. https://doi.org/10.1145/2783258.2783267.
     """
-    pass
+    import math
+    from collections import Counter
+    from networkx.utils import not_implemented_for
+
+    @not_implemented_for('multigraph')
+    def panther_similarity_impl(G, source, k, path_length, c, delta, eps, weight):
+        if source not in G:
+            raise nx.NodeNotFound(f"Source node {source} is not in G")
+
+        if G.degree(source) == 0:
+            raise nx.NetworkXUnfeasible("Source node is isolated.")
+
+        if eps is None:
+            eps = math.sqrt(1 / G.number_of_edges())
+
+        # Calculate the number of random paths to generate
+        R = int((c / (eps ** 2)) * math.log(2 / delta))
+
+        # Generate random paths
+        paths = list(generate_random_paths(G, R, path_length, weight=weight))
+
+        # Count occurrences of nodes in paths containing the source node
+        node_counts = Counter()
+        for path in paths:
+            if source in path:
+                node_counts.update(set(path) - {source})
+
+        # Calculate similarity scores
+        similarity = {node: count / R for node, count in node_counts.items()}
+
+        # Sort by similarity score and return top k-1 (excluding the source node)
+        return dict(sorted(similarity.items(), key=lambda x: x[1], reverse=True)[:k-1])
+
+    return panther_similarity_impl(G, source, k, path_length, c, delta, eps, weight)
 
 
 @np_random_state(5)
@@ -900,4 +1088,30 @@ def generate_random_paths(G, sample_size, path_length=5, index_map=None,
            on Knowledge Discovery and Data Mining (Vol. 2015-August, pp. 1445–1454).
            Association for Computing Machinery. https://doi.org/10.1145/2783258.2783267.
     """
-    pass
+    import random
+
+    if seed is not None:
+        random.seed(seed)
+
+    def generate_path():
+        path = []
+        current_node = random.choice(list(G.nodes()))
+        for _ in range(path_length):
+            path.append(current_node)
+            neighbors = list(G.neighbors(current_node))
+            if not neighbors:
+                break
+            current_node = random.choices(neighbors, weights=[G[current_node][neighbor].get(weight, 1) for neighbor in neighbors])[0]
+        return path
+
+    paths = []
+    for i in range(sample_size):
+        path = generate_path()
+        paths.append(path)
+        if index_map is not None:
+            for node in set(path):
+                if node not in index_map:
+                    index_map[node] = set()
+                index_map[node].add(i)
+
+    return paths
