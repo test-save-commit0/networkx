@@ -175,7 +175,23 @@ def from_pandas_adjacency(df, create_using=None):
     >>> print(G)
     Graph named 'Graph from pandas adjacency matrix' with 2 nodes and 3 edges
     """
-    pass
+    import numpy as np
+
+    A = df.values
+    G = from_numpy_array(A, create_using=create_using)
+
+    # Add node attributes
+    nodes = list(df.index)
+    G = G.fresh_copy()
+    G.add_nodes_from(nodes)
+
+    # Add edge attributes
+    for i, row in enumerate(df.iterrows()):
+        for j, value in enumerate(row[1]):
+            if not np.isnan(value):
+                G.add_edge(nodes[i], nodes[j], weight=value)
+
+    return G
 
 
 @nx._dispatchable(preserve_edge_attrs=True)
@@ -234,7 +250,32 @@ def to_pandas_edgelist(G, source='source', target='target', nodelist=None,
     1      A      B     9     1
 
     """
-    pass
+    import pandas as pd
+
+    if nodelist is None:
+        edgelist = G.edges(data=True)
+    else:
+        edgelist = G.edges(nodelist, data=True)
+
+    source_nodes = []
+    target_nodes = []
+    edge_data = defaultdict(list)
+
+    for u, v, data in edgelist:
+        source_nodes.append(u)
+        target_nodes.append(v)
+        for key, value in data.items():
+            edge_data[key].append(value)
+
+    edge_data[source] = source_nodes
+    edge_data[target] = target_nodes
+
+    if edge_key is not None and G.is_multigraph():
+        edge_keys = [k for u, v, k in G.edges(keys=True)]
+        edge_data[edge_key] = edge_keys
+
+    df = pd.DataFrame(edge_data, dtype=dtype)
+    return df
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -349,7 +390,34 @@ def from_pandas_edgelist(df, source='source', target='target', edge_attr=
 
 
     """
-    pass
+    g = nx.empty_graph(0, create_using)
+
+    if edge_attr is True:
+        edge_attr = list(df.columns)
+        edge_attr.remove(source)
+        edge_attr.remove(target)
+        if edge_key is not None:
+            edge_attr.remove(edge_key)
+
+    for row in df.itertuples(index=False):
+        u = getattr(row, source)
+        v = getattr(row, target)
+
+        if edge_key is not None and g.is_multigraph():
+            key = getattr(row, edge_key)
+            if edge_attr is None:
+                g.add_edge(u, v, key=key)
+            else:
+                attr = {attr: getattr(row, attr) for attr in edge_attr}
+                g.add_edge(u, v, key=key, **attr)
+        else:
+            if edge_attr is None:
+                g.add_edge(u, v)
+            else:
+                attr = {attr: getattr(row, attr) for attr in edge_attr}
+                g.add_edge(u, v, **attr)
+
+    return g
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -442,7 +510,11 @@ def _csr_gen_triples(A):
     an iterable of weighted edge triples.
 
     """
-    pass
+    nrows = A.shape[0]
+    data, indices, indptr = A.data, A.indices, A.indptr
+    for i in range(nrows):
+        for j in range(indptr[i], indptr[i + 1]):
+            yield i, indices[j], data[j]
 
 
 def _csc_gen_triples(A):
@@ -450,7 +522,11 @@ def _csc_gen_triples(A):
     an iterable of weighted edge triples.
 
     """
-    pass
+    ncols = A.shape[1]
+    data, indices, indptr = A.data, A.indices, A.indptr
+    for i in range(ncols):
+        for j in range(indptr[i], indptr[i + 1]):
+            yield indices[j], i, data[j]
 
 
 def _coo_gen_triples(A):
@@ -458,7 +534,8 @@ def _coo_gen_triples(A):
     of weighted edge triples.
 
     """
-    pass
+    row, col, data = A.row, A.col, A.data
+    return zip(row, col, data)
 
 
 def _dok_gen_triples(A):
@@ -466,7 +543,8 @@ def _dok_gen_triples(A):
     iterable of weighted edge triples.
 
     """
-    pass
+    for (r, c), v in A.items():
+        yield r, c, v
 
 
 def _generate_weighted_edges(A):
@@ -476,7 +554,16 @@ def _generate_weighted_edges(A):
     `A` is a SciPy sparse array (in any format).
 
     """
-    pass
+    if A.format == 'csr':
+        return _csr_gen_triples(A)
+    elif A.format == 'csc':
+        return _csc_gen_triples(A)
+    elif A.format == 'coo':
+        return _coo_gen_triples(A)
+    elif A.format == 'dok':
+        return _dok_gen_triples(A)
+    else:
+        raise nx.NetworkXError("Unknown sparse array format: " + repr(A.format))
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
