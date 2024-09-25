@@ -65,7 +65,35 @@ def dfs_edges(G, source=None, depth_limit=None, *, sort_neighbors=None):
     .. [1] http://www.ics.uci.edu/~eppstein/PADS
     .. [2] https://en.wikipedia.org/wiki/Depth-limited_search
     """
-    pass
+    if source is None:
+        # produce edges for all components
+        nodes = G
+    else:
+        # produce edges for components with source
+        nodes = [source]
+    visited = set()
+    if depth_limit is None:
+        depth_limit = len(G)
+    for start in nodes:
+        if start in visited:
+            continue
+        visited.add(start)
+        stack = [(start, depth_limit, iter(G[start]))]
+        while stack:
+            parent, depth_now, children = stack[-1]
+            try:
+                child = next(children)
+                if child not in visited:
+                    yield parent, child
+                    visited.add(child)
+                    if depth_now > 1:
+                        if sort_neighbors is not None:
+                            children = sort_neighbors(iter(G[child]))
+                        else:
+                            children = iter(G[child])
+                        stack.append((child, depth_now - 1, children))
+            except StopIteration:
+                stack.pop()
 
 
 @nx._dispatchable(returns_graph=True)
@@ -110,7 +138,13 @@ def dfs_tree(G, source=None, depth_limit=None, *, sort_neighbors=None):
     :func:`~networkx.algorithms.traversal.edgedfs.edge_dfs`
     :func:`~networkx.algorithms.traversal.breadth_first_search.bfs_tree`
     """
-    pass
+    T = nx.DiGraph()
+    if source is None:
+        T.add_nodes_from(G)
+    else:
+        T.add_node(source)
+    T.add_edges_from(dfs_edges(G, source, depth_limit, sort_neighbors=sort_neighbors))
+    return T
 
 
 @nx._dispatchable
@@ -169,7 +203,7 @@ def dfs_predecessors(G, source=None, depth_limit=None, *, sort_neighbors=None):
     :func:`~networkx.algorithms.traversal.edgedfs.edge_dfs`
     :func:`~networkx.algorithms.traversal.breadth_first_search.bfs_tree`
     """
-    pass
+    return {v: u for u, v in dfs_edges(G, source, depth_limit, sort_neighbors=sort_neighbors)}
 
 
 @nx._dispatchable
@@ -228,12 +262,15 @@ def dfs_successors(G, source=None, depth_limit=None, *, sort_neighbors=None):
     :func:`~networkx.algorithms.traversal.edgedfs.edge_dfs`
     :func:`~networkx.algorithms.traversal.breadth_first_search.bfs_tree`
     """
-    pass
+    from collections import defaultdict
+    succ = defaultdict(list)
+    for u, v in dfs_edges(G, source=source, depth_limit=depth_limit, sort_neighbors=sort_neighbors):
+        succ[u].append(v)
+    return dict(succ)
 
 
 @nx._dispatchable
-def dfs_postorder_nodes(G, source=None, depth_limit=None, *, sort_neighbors
-    =None):
+def dfs_postorder_nodes(G, source=None, depth_limit=None, *, sort_neighbors=None):
     """Generate nodes in a depth-first-search post-ordering starting at source.
 
     Parameters
@@ -285,12 +322,37 @@ def dfs_postorder_nodes(G, source=None, depth_limit=None, *, sort_neighbors
     :func:`~networkx.algorithms.traversal.edgedfs.edge_dfs`
     :func:`~networkx.algorithms.traversal.breadth_first_search.bfs_tree`
     """
-    pass
+    if source is None:
+        nodes = G
+    else:
+        nodes = [source]
+    visited = set()
+    if depth_limit is None:
+        depth_limit = len(G)
+    for start in nodes:
+        if start in visited:
+            continue
+        visited.add(start)
+        stack = [(start, depth_limit, iter(G[start]))]
+        while stack:
+            parent, depth_now, children = stack[-1]
+            try:
+                child = next(children)
+                if child not in visited:
+                    visited.add(child)
+                    if depth_now > 1:
+                        if sort_neighbors is not None:
+                            children = sort_neighbors(iter(G[child]))
+                        else:
+                            children = iter(G[child])
+                        stack.append((child, depth_now - 1, children))
+            except StopIteration:
+                yield parent
+                stack.pop()
 
 
 @nx._dispatchable
-def dfs_preorder_nodes(G, source=None, depth_limit=None, *, sort_neighbors=None
-    ):
+def dfs_preorder_nodes(G, source=None, depth_limit=None, *, sort_neighbors=None):
     """Generate nodes in a depth-first-search pre-ordering starting at source.
 
     Parameters
@@ -342,12 +404,38 @@ def dfs_preorder_nodes(G, source=None, depth_limit=None, *, sort_neighbors=None
     dfs_labeled_edges
     :func:`~networkx.algorithms.traversal.breadth_first_search.bfs_edges`
     """
-    pass
+    if source is None:
+        nodes = G
+    else:
+        nodes = [source]
+    visited = set()
+    if depth_limit is None:
+        depth_limit = len(G)
+    for start in nodes:
+        if start in visited:
+            continue
+        yield start
+        visited.add(start)
+        stack = [(start, depth_limit, iter(G[start]))]
+        while stack:
+            parent, depth_now, children = stack[-1]
+            try:
+                child = next(children)
+                if child not in visited:
+                    yield child
+                    visited.add(child)
+                    if depth_now > 1:
+                        if sort_neighbors is not None:
+                            children = sort_neighbors(iter(G[child]))
+                        else:
+                            children = iter(G[child])
+                        stack.append((child, depth_now - 1, children))
+            except StopIteration:
+                stack.pop()
 
 
 @nx._dispatchable
-def dfs_labeled_edges(G, source=None, depth_limit=None, *, sort_neighbors=None
-    ):
+def dfs_labeled_edges(G, source=None, depth_limit=None, *, sort_neighbors=None):
     """Iterate over edges in a depth-first-search (DFS) labeled by type.
 
     Parameters
@@ -418,4 +506,40 @@ def dfs_labeled_edges(G, source=None, depth_limit=None, *, sort_neighbors=None
     dfs_preorder_nodes
     dfs_postorder_nodes
     """
-    pass
+    if source is None:
+        # produce edges for all components
+        nodes = G
+    else:
+        # produce edges for components with source
+        nodes = [source]
+    visited = set()
+    if depth_limit is None:
+        depth_limit = len(G)
+    for start in nodes:
+        if start in visited:
+            continue
+        yield start, start, 'forward'
+        visited.add(start)
+        stack = [(start, depth_limit, iter(G[start]))]
+        while stack:
+            parent, depth_now, children = stack[-1]
+            try:
+                child = next(children)
+                if child in visited:
+                    yield parent, child, 'nontree'
+                else:
+                    yield parent, child, 'forward'
+                    visited.add(child)
+                    if depth_now > 1:
+                        if sort_neighbors is not None:
+                            children = sort_neighbors(iter(G[child]))
+                        else:
+                            children = iter(G[child])
+                        stack.append((child, depth_now - 1, children))
+                    else:
+                        yield child, parent, 'reverse-depth_limit'
+            except StopIteration:
+                stack.pop()
+                if stack:
+                    yield stack[-1][0], parent, 'reverse'
+        yield start, start, 'reverse'
