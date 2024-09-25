@@ -65,7 +65,21 @@ def communicability(G):
     >>> G = nx.Graph([(0, 1), (1, 2), (1, 5), (5, 4), (2, 4), (2, 3), (4, 3), (3, 6)])
     >>> c = nx.communicability(G)
     """
-    pass
+    import numpy as np
+    
+    A = nx.to_numpy_array(G)
+    w, v = np.linalg.eigh(A)
+    
+    comm = {}
+    for u in G:
+        comm[u] = {}
+        for v in G:
+            comm[u][v] = sum(
+                v_j[u] * v_j[v] * np.exp(w_j)
+                for w_j, v_j in zip(w, v.T)
+            )
+    
+    return comm
 
 
 @not_implemented_for('directed')
@@ -124,4 +138,14 @@ def communicability_exp(G):
     >>> G = nx.Graph([(0, 1), (1, 2), (1, 5), (5, 4), (2, 4), (2, 3), (4, 3), (3, 6)])
     >>> c = nx.communicability_exp(G)
     """
-    pass
+    import numpy as np
+    from scipy.linalg import expm
+    
+    A = nx.to_numpy_array(G)
+    exp_A = expm(A)
+    
+    comm = {}
+    for u, row in enumerate(exp_A):
+        comm[u] = dict(zip(G.nodes(), row))
+    
+    return comm
