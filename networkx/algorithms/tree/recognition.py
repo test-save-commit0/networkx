@@ -113,7 +113,13 @@ def is_arborescence(G):
     is_tree
 
     """
-    pass
+    if not nx.is_directed_acyclic_graph(G):
+        return False
+    
+    if not nx.is_weakly_connected(G):
+        return False
+    
+    return all(G.in_degree(node) <= 1 for node in G)
 
 
 @nx.utils.not_implemented_for('undirected')
@@ -153,7 +159,10 @@ def is_branching(G):
     is_forest
 
     """
-    pass
+    if not nx.is_directed_acyclic_graph(G):
+        return False
+    
+    return all(G.in_degree(node) <= 1 for node in G)
 
 
 @nx._dispatchable
@@ -202,7 +211,15 @@ def is_forest(G):
     is_branching
 
     """
-    pass
+    if G.number_of_nodes() == 0:
+        raise nx.NetworkXPointlessConcept("G is empty.")
+    
+    if G.is_directed():
+        H = G.to_undirected(as_view=True)
+    else:
+        H = G
+    
+    return nx.number_of_edges(H) == nx.number_of_nodes(H) - nx.number_of_connected_components(H)
 
 
 @nx._dispatchable
@@ -251,4 +268,12 @@ def is_tree(G):
     is_arborescence
 
     """
-    pass
+    if G.number_of_nodes() == 0:
+        raise nx.NetworkXPointlessConcept("G is empty.")
+    
+    if G.is_directed():
+        H = G.to_undirected(as_view=True)
+    else:
+        H = G
+    
+    return nx.is_connected(H) and nx.number_of_edges(H) == nx.number_of_nodes(H) - 1
