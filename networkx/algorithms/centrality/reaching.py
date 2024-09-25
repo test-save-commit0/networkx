@@ -20,7 +20,11 @@ def _average_weight(G, path, weight=None):
       is assumed to be the multiplicative inverse of the length of the path.
       Otherwise holds the name of the edge attribute used as weight.
     """
-    pass
+    if len(path) < 2:
+        return 0
+    if weight is None:
+        return 1 / (len(path) - 1)
+    return sum(G[u][v].get(weight, 1) for u, v in pairwise(path)) / (len(path) - 1)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -76,7 +80,12 @@ def global_reaching_centrality(G, weight=None, normalized=True):
            *PLoS ONE* 7.3 (2012): e33799.
            https://doi.org/10.1371/journal.pone.0033799
     """
-    pass
+    local_reach = {v: local_reaching_centrality(G, v, weight=weight, normalized=normalized)
+                   for v in G}
+    if not local_reach:
+        return 0.0
+    max_reach = max(local_reach.values())
+    return sum(max_reach - c for c in local_reach.values()) / len(G)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -138,4 +147,18 @@ def local_reaching_centrality(G, v, paths=None, weight=None, normalized=True):
            *PLoS ONE* 7.3 (2012): e33799.
            https://doi.org/10.1371/journal.pone.0033799
     """
-    pass
+    if paths is None:
+        paths = nx.shortest_path(G, source=v, weight=weight)
+    
+    n = len(G) - 1  # excluding the node itself
+    if n == 0:
+        return 0.0
+    
+    reachable = sum(1 for p in paths.values() if len(p) > 1)
+    if not normalized:
+        return reachable / n
+    
+    total_weight = sum(_average_weight(G, p, weight) for p in paths.values() if len(p) > 1)
+    max_weight = n * _average_weight(G, [v, list(G.neighbors(v))[0]], weight) if G.neighbors(v) else 0
+    
+    return total_weight / max_weight if max_weight > 0 else 0.0
