@@ -20,7 +20,7 @@ def nodes(G):
 
     This function wraps the :func:`G.nodes <networkx.Graph.nodes>` property.
     """
-    pass
+    return G.nodes()
 
 
 def edges(G, nbunch=None):
@@ -32,7 +32,7 @@ def edges(G, nbunch=None):
 
     This function wraps the :func:`G.edges <networkx.Graph.edges>` property.
     """
-    pass
+    return G.edges(nbunch)
 
 
 def degree(G, nbunch=None, weight=None):
@@ -41,7 +41,7 @@ def degree(G, nbunch=None, weight=None):
 
     This function wraps the :func:`G.degree <networkx.Graph.degree>` property.
     """
-    pass
+    return G.degree(nbunch, weight)
 
 
 def neighbors(G, n):
@@ -49,7 +49,7 @@ def neighbors(G, n):
 
     This function wraps the :func:`G.neighbors <networkx.Graph.neighbors>` function.
     """
-    pass
+    return G.neighbors(n)
 
 
 def number_of_nodes(G):
@@ -57,7 +57,7 @@ def number_of_nodes(G):
 
     This function wraps the :func:`G.number_of_nodes <networkx.Graph.number_of_nodes>` function.
     """
-    pass
+    return G.number_of_nodes()
 
 
 def number_of_edges(G):
@@ -65,7 +65,7 @@ def number_of_edges(G):
 
     This function wraps the :func:`G.number_of_edges <networkx.Graph.number_of_edges>` function.
     """
-    pass
+    return G.number_of_edges()
 
 
 def density(G):
@@ -93,7 +93,14 @@ def density(G):
     Self loops are counted in the total number of edges so graphs with self
     loops can have density higher than 1.
     """
-    pass
+    n = G.number_of_nodes()
+    m = G.number_of_edges()
+    if n <= 1:
+        return 0.0
+    if G.is_directed():
+        return m / (n * (n - 1))
+    else:
+        return (2 * m) / (n * (n - 1))
 
 
 def degree_histogram(G):
@@ -115,17 +122,22 @@ def degree_histogram(G):
     Note: the bins are width one, hence len(list) can be large
     (Order(number_of_edges))
     """
-    pass
+    degrees = [d for n, d in G.degree()]
+    max_degree = max(degrees) if degrees else 0
+    hist = [0] * (max_degree + 1)
+    for d in degrees:
+        hist[d] += 1
+    return hist
 
 
 def is_directed(G):
     """Return True if graph is directed."""
-    pass
+    return G.is_directed()
 
 
 def frozen(*args, **kwargs):
     """Dummy method for raising errors when trying to modify frozen graphs"""
-    pass
+    raise nx.NetworkXError("Frozen graph can't be modified")
 
 
 def freeze(G):
@@ -163,7 +175,17 @@ def freeze(G):
     --------
     is_frozen
     """
-    pass
+    G.add_node = frozen
+    G.add_nodes_from = frozen
+    G.remove_node = frozen
+    G.remove_nodes_from = frozen
+    G.add_edge = frozen
+    G.add_edges_from = frozen
+    G.remove_edge = frozen
+    G.remove_edges_from = frozen
+    G.clear = frozen
+    G.frozen = True
+    return G
 
 
 def is_frozen(G):
@@ -178,7 +200,7 @@ def is_frozen(G):
     --------
     freeze
     """
-    pass
+    return getattr(G, 'frozen', False)
 
 
 def add_star(G_to_add_to, nodes_for_star, **attr):
