@@ -53,4 +53,17 @@ def random_cograph(n, seed=None):
        Discrete Applied Mathematics, Volume 3, Issue 3, 1981, Pages 163-174,
        ISSN 0166-218X.
     """
-    pass
+    if n <= 0:
+        return nx.empty_graph(0)
+
+    G = nx.empty_graph(1)
+    for _ in range(n):
+        H = G.copy()
+        if seed.random() < 0.5:
+            # Perform disjoint union
+            G = nx.disjoint_union(G, H)
+        else:
+            # Perform full join (complement of disjoint union)
+            G = nx.complement(nx.disjoint_union(G, H))
+
+    return G
