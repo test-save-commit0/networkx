@@ -64,18 +64,66 @@ def build_residual_network(G, capacity):
     :samp:`s`-:samp:`t` cut.
 
     """
-    pass
+    R = nx.DiGraph()
+    R.add_nodes_from(G)
+
+    inf = float('inf')
+    R.graph['inf'] = inf
+
+    for u, v, attr in G.edges(data=True):
+        if u != v:
+            r_capacity = attr.get(capacity, inf)
+            if r_capacity == inf:
+                r_capacity = R.graph['inf']
+
+            if R.has_edge(u, v):
+                R[u][v]['capacity'] += r_capacity
+            else:
+                R.add_edge(u, v, capacity=r_capacity, flow=0)
+
+            if not R.has_edge(v, u):
+                R.add_edge(v, u, capacity=0, flow=0)
+
+    R.graph['flow_value'] = 0
+    return R
 
 
 @nx._dispatchable(graphs='R', preserve_edge_attrs={'R': {'capacity': float(
     'inf')}}, preserve_graph_attrs=True)
 def detect_unboundedness(R, s, t):
     """Detect an infinite-capacity s-t path in R."""
-    pass
+    inf = R.graph['inf']
+    queue = deque([(s, [])])
+    visited = set()
+
+    while queue:
+        node, path = queue.popleft()
+        if node == t:
+            return path
+        if node in visited:
+            continue
+        visited.add(node)
+
+        for _, v, attr in R.edges(node, data=True):
+            if attr['capacity'] == inf and v not in visited:
+                new_path = path + [(node, v)]
+                queue.append((v, new_path))
+
+    return None
 
 
 @nx._dispatchable(graphs={'G': 0, 'R': 1}, preserve_edge_attrs={'R': {
     'flow': None}})
 def build_flow_dict(G, R):
     """Build a flow dictionary from a residual network."""
-    pass
+    flow_dict = {}
+
+    for u in G:
+        flow_dict[u] = {}
+        for v, attr in G[u].items():
+            if R.has_edge(u, v):
+                flow_dict[u][v] = max(0, R[u][v]['flow'])
+            else:
+                flow_dict[u][v] = 0
+
+    return flow_dict
