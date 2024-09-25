@@ -22,7 +22,13 @@ def _raise_on_directed(func):
     NetworkX exception when `create_using` is a DiGraph (class or instance) for
     graph generators that do not support directed outputs.
     """
-    pass
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        create_using = kwargs.get('create_using', None)
+        if create_using is not None and nx.is_directed(create_using):
+            raise nx.NetworkXError("Directed graphs are not supported")
+        return func(*args, **kwargs)
+    return wrapper
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -77,7 +83,20 @@ def LCF_graph(n, shift_list, repeats, create_using=None):
     .. [1] https://en.wikipedia.org/wiki/LCF_notation
 
     """
-    pass
+    if n < 1:
+        return empty_graph(0, create_using)
+    
+    G = cycle_graph(n, create_using)
+    
+    if G.is_directed():
+        raise nx.NetworkXError("LCF notation only implemented for undirected graphs")
+    
+    shifts = shift_list * repeats
+    for i in range(n):
+        for shift in shifts:
+            G.add_edge(i, (i + shift) % n)
+    
+    return G
 
 
 @_raise_on_directed
@@ -106,7 +125,9 @@ def bull_graph(create_using=None):
     .. [1] https://en.wikipedia.org/wiki/Bull_graph.
 
     """
-    pass
+    G = empty_graph(5, create_using)
+    G.add_edges_from([(0, 1), (0, 2), (1, 2), (1, 3), (2, 4)])
+    return G
 
 
 @_raise_on_directed
@@ -135,7 +156,14 @@ def chvatal_graph(create_using=None):
     .. [2] https://mathworld.wolfram.com/ChvatalGraph.html
 
     """
-    pass
+    G = empty_graph(12, create_using)
+    G.add_edges_from([
+        (0, 1), (0, 4), (0, 6), (0, 9), (1, 2), (1, 5), (1, 7),
+        (2, 3), (2, 6), (2, 8), (3, 4), (3, 7), (3, 9), (4, 5),
+        (4, 8), (5, 6), (5, 9), (6, 10), (7, 8), (7, 10), (8, 11),
+        (9, 11), (10, 11)
+    ])
+    return G
 
 
 @_raise_on_directed
@@ -165,7 +193,12 @@ def cubical_graph(create_using=None):
     .. [1] https://en.wikipedia.org/wiki/Cube#Cubical_graph
 
     """
-    pass
+    G = empty_graph(8, create_using)
+    G.add_edges_from([
+        (0, 1), (0, 3), (0, 4), (1, 2), (1, 5), (2, 3),
+        (2, 6), (3, 7), (4, 5), (4, 7), (5, 6), (6, 7)
+    ])
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -193,7 +226,7 @@ def desargues_graph(create_using=None):
     .. [1] https://en.wikipedia.org/wiki/Desargues_graph
     .. [2] https://mathworld.wolfram.com/DesarguesGraph.html
     """
-    pass
+    return LCF_graph(20, [5, -5, 9, -9], 5, create_using)
 
 
 @_raise_on_directed
