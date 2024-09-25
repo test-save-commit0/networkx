@@ -59,7 +59,25 @@ def kl_connected_subgraph(G, k, l, low_memory=False, same_as_graph=False):
            2004. 89--104.
 
     """
-    pass
+    H = G.copy()
+    edges_to_remove = set()
+
+    for u, v in G.edges():
+        if low_memory:
+            paths = list(nx.edge_disjoint_paths(G, u, v, cutoff=k))
+        else:
+            paths = list(nx.edge_disjoint_paths(G.subgraph(nx.ego_graph(G, u, radius=k)), u, v))
+        
+        if len(paths) < l:
+            edges_to_remove.add((u, v))
+
+    H.remove_edges_from(edges_to_remove)
+
+    if same_as_graph:
+        is_same = len(edges_to_remove) == 0
+        return H, is_same
+    else:
+        return H
 
 
 @nx._dispatchable
@@ -103,4 +121,12 @@ def is_kl_connected(G, k, l, low_memory=False):
            2004. 89--104.
 
     """
-    pass
+    for u, v in G.edges():
+        if low_memory:
+            paths = list(nx.edge_disjoint_paths(G, u, v, cutoff=k))
+        else:
+            paths = list(nx.edge_disjoint_paths(G.subgraph(nx.ego_graph(G, u, radius=k)), u, v))
+        
+        if len(paths) < l:
+            return False
+    return True
