@@ -118,7 +118,26 @@ def girvan_newman(G, most_valuable_edge=None):
     result can be depicted as a dendrogram.
 
     """
-    pass
+    if most_valuable_edge is None:
+        def most_valuable_edge(G):
+            centrality = nx.edge_betweenness_centrality(G)
+            return max(centrality, key=centrality.get)
+
+    # Copy the graph to avoid modifying the original
+    g = G.copy()
+    
+    while g.number_of_edges() > 0:
+        # Find connected components
+        components = list(nx.connected_components(g))
+        yield tuple(components)
+        
+        # If there's only one component left, we're done
+        if len(components) == len(g):
+            break
+        
+        # Remove the most valuable edge
+        edge = most_valuable_edge(g)
+        g.remove_edge(*edge)
 
 
 def _without_most_central_edges(G, most_valuable_edge):
@@ -134,4 +153,20 @@ def _without_most_central_edges(G, most_valuable_edge):
     until the number of connected components in the graph increases.
 
     """
-    pass
+    if G.number_of_edges() == 0:
+        raise nx.NetworkXError("Graph G must have at least one edge.")
+    
+    # Get the initial number of connected components
+    initial_components = nx.number_connected_components(G)
+    
+    while True:
+        # Find and remove the most valuable edge
+        edge = most_valuable_edge(G)
+        G.remove_edge(*edge)
+        
+        # Check if the number of connected components has increased
+        if nx.number_connected_components(G) > initial_components:
+            break
+    
+    # Return the connected components
+    return list(nx.connected_components(G))
