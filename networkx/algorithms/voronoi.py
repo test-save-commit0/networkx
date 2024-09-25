@@ -67,4 +67,18 @@ def voronoi_cells(G, center_nodes, weight='weight'):
         https://doi.org/10.1002/1097-0037(200010)36:3<156::AID-NET2>3.0.CO;2-L
 
     """
-    pass
+    if not center_nodes:
+        raise ValueError("center_nodes must not be empty")
+
+    # Use multi_source_dijkstra to compute shortest paths from all center nodes
+    lengths, paths = nx.multi_source_dijkstra(G, center_nodes, weight=weight)
+
+    # Initialize Voronoi cells
+    cells = {center: set() for center in center_nodes}
+
+    # Assign each node to the closest center
+    for node, distance in lengths.items():
+        closest_center = min(center_nodes, key=lambda c: nx.shortest_path_length(G, c, node, weight=weight))
+        cells[closest_center].add(node)
+
+    return cells
