@@ -56,7 +56,8 @@ def treewidth_min_degree(G):
     Treewidth decomposition : (int, Graph) tuple
           2-tuple with treewidth and the corresponding decomposed tree.
     """
-    pass
+    heuristic = MinDegreeHeuristic(G)
+    return treewidth_decomp(G, heuristic.min_degree_heuristic)
 
 
 @not_implemented_for('directed')
@@ -78,7 +79,7 @@ def treewidth_min_fill_in(G):
     Treewidth decomposition : (int, Graph) tuple
         2-tuple with treewidth and the corresponding decomposed tree.
     """
-    pass
+    return treewidth_decomp(G, min_fill_in_heuristic)
 
 
 class MinDegreeHeuristic:
@@ -101,14 +102,25 @@ class MinDegreeHeuristic:
 
 
 def min_fill_in_heuristic(graph):
-    """Implements the Minimum Degree heuristic.
+    """Implements the Minimum Fill-in heuristic.
 
     Returns the node from the graph, where the number of edges added when
     turning the neighborhood of the chosen node into clique is as small as
     possible. This algorithm chooses the nodes using the Minimum Fill-In
     heuristic. The running time of the algorithm is :math:`O(V^3)` and it uses
     additional constant memory."""
-    pass
+    min_fill = float('inf')
+    min_node = None
+    for node in graph:
+        fill = 0
+        nbrs = set(graph[node])
+        for u, v in itertools.combinations(nbrs, 2):
+            if v not in graph[u]:
+                fill += 1
+        if fill < min_fill:
+            min_fill = fill
+            min_node = node
+    return min_node
 
 
 @nx._dispatchable(returns_graph=True)
@@ -125,4 +137,23 @@ def treewidth_decomp(G, heuristic=min_fill_in_heuristic):
     Treewidth decomposition : (int, Graph) tuple
         2-tuple with treewidth and the corresponding decomposed tree.
     """
-    pass
+    H = G.copy()
+    elimination_order = []
+    tree = nx.Graph()
+    tree.add_nodes_from(G.nodes())
+    
+    while H:
+        v = heuristic(H)
+        elimination_order.append(v)
+        nbrs = list(H.neighbors(v))
+        
+        # Create a clique with the neighbors of v
+        for u, w in itertools.combinations(nbrs, 2):
+            if not H.has_edge(u, w):
+                H.add_edge(u, w)
+                tree.add_edge(u, w)
+        
+        H.remove_node(v)
+    
+    treewidth = max(len(list(tree.neighbors(v))) for v in tree.nodes())
+    return treewidth, tree
