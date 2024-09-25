@@ -176,7 +176,24 @@ def louvain_partitions(G, weight='weight', resolution=1, threshold=1e-07,
     --------
     louvain_communities
     """
-    pass
+    is_directed = G.is_directed()
+    if is_directed:
+        G = G.to_undirected()
+
+    partition = [{frozenset([node])} for node in G.nodes()]
+    m = G.size(weight=weight)
+    
+    while True:
+        yield [set(community) for community in partition]
+        
+        new_partition = _one_level(G, m, partition, resolution, is_directed, seed)
+        new_mod = modularity(G, new_partition, resolution=resolution, weight=weight)
+        
+        if new_mod - modularity(G, partition, resolution=resolution, weight=weight) < threshold:
+            break
+        
+        partition = new_partition
+        G = _gen_graph(G, partition)
 
 
 def _one_level(G, m, partition, resolution=1, is_directed=False, seed=None):
@@ -199,7 +216,36 @@ def _one_level(G, m, partition, resolution=1, is_directed=False, seed=None):
         See :ref:`Randomness<randomness>`.
 
     """
-    pass
+    rng = nx.utils.create_random_state(seed)
+    node2com = {node: i for i, community in enumerate(partition) for node in community}
+    
+    improvement = True
+    while improvement:
+        improvement = False
+        nodes = list(G.nodes())
+        rng.shuffle(nodes)
+        
+        for node in nodes:
+            com = node2com[node]
+            nbr_weights = _neighbor_weights(G[node], node2com)
+            
+            best_com = com
+            best_increase = 0
+            
+            for nbr_com, weight in nbr_weights.items():
+                increase = weight - resolution * G.degree(node, weight='weight') * sum(G.degree(n, weight='weight') for n in partition[nbr_com]) / (2 * m)
+                
+                if increase > best_increase:
+                    best_increase = increase
+                    best_com = nbr_com
+            
+            if best_com != com:
+                partition[com].remove(node)
+                partition[best_com].add(node)
+                node2com[node] = best_com
+                improvement = True
+    
+    return [frozenset(com) for com in partition if com]
 
 
 def _neighbor_weights(nbrs, node2com):
@@ -213,12 +259,25 @@ def _neighbor_weights(nbrs, node2com):
            Dictionary with all graph's nodes as keys and their community index as value.
 
     """
-    pass
+    weights = defaultdict(float)
+    for neighbor, weight in nbrs.items():
+        weights[node2com[neighbor]] += weight
+    return weights
 
 
 def _gen_graph(G, partition):
     """Generate a new graph based on the partitions of a given graph"""
-    pass
+    H = nx.Graph()
+    node2com = {node: i for i, community in enumerate(partition) for node in community}
+    
+    for node in G.nodes():
+        H.add_node(node2com[node])
+    
+    for u, v, weight in G.edges(data='weight', default=1):
+        w = H.get_edge_data(node2com[u], node2com[v], {'weight': 0})['weight']
+        H.add_edge(node2com[u], node2com[v], weight=w + weight)
+    
+    return H
 
 
 def _convert_multigraph(G, weight, is_directed):
