@@ -97,7 +97,17 @@ def generate_edgelist(G, delimiter=' ', data=True):
     --------
     write_adjlist, read_adjlist
     """
-    pass
+    for u, v, d in G.edges(data=True):
+        if data is False:
+            yield f"{u}{delimiter}{v}"
+        elif data is True:
+            yield f"{u}{delimiter}{v}{delimiter}{d}"
+        elif isinstance(data, (list, tuple)):
+            edge_data = ' '.join(str(d.get(k, '')) for k in data if k in d)
+            if edge_data:
+                yield f"{u}{delimiter}{v}{delimiter}{edge_data}"
+            else:
+                yield f"{u}{delimiter}{v}"
 
 
 @open_file(1, mode='wb')
@@ -145,7 +155,9 @@ def write_edgelist(G, path, comments='#', delimiter=' ', data=True,
     read_edgelist
     write_weighted_edgelist
     """
-    pass
+    for line in generate_edgelist(G, delimiter, data):
+        line += '\n'
+        path.write(line.encode(encoding))
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -210,7 +222,55 @@ def parse_edgelist(lines, comments='#', delimiter=None, create_using=None,
     --------
     read_weighted_edgelist
     """
-    pass
+    import ast
+    from itertools import chain
+    from collections import defaultdict
+
+    G = nx.empty_graph(0, create_using)
+    for line in lines:
+        if comments is not None:
+            p = line.find(comments)
+            if p >= 0:
+                line = line[:p]
+        if not line:
+            continue
+        # split line, should have 2 or more
+        s = line.strip().split(delimiter)
+        if len(s) < 2:
+            continue
+        u = s.pop(0)
+        v = s.pop(0)
+        d = s
+        if nodetype is not None:
+            try:
+                u = nodetype(u)
+                v = nodetype(v)
+            except:
+                raise TypeError("Failed to convert nodes %s,%s to type %s."
+                                % (u, v, nodetype))
+
+        if len(d) == 0 or data is False:
+            # no data or data type specified
+            G.add_edge(u, v)
+        elif data is True:
+            # no edge types specified
+            try:
+                edge_data = ast.literal_eval(" ".join(d))
+            except:
+                raise TypeError("Failed to convert edge data (%s) to dictionary."
+                                % " ".join(d))
+            G.add_edge(u, v, **edge_data)
+        else:
+            # convert edge data to dictionary with specified keys and type
+            edge_data = defaultdict(str)
+            for (edge_key, edge_type), edge_value in zip(data, d):
+                try:
+                    edge_data[edge_key] = edge_type(edge_value)
+                except:
+                    raise TypeError("Failed to convert %s data %s to type %s."
+                                    % (edge_key, edge_value, edge_type))
+            G.add_edge(u, v, **edge_data)
+    return G
 
 
 @open_file(0, mode='rb')
@@ -282,7 +342,13 @@ def read_edgelist(path, comments='#', delimiter=None, create_using=None,
     Since nodes must be hashable, the function nodetype must return hashable
     types (e.g. int, float, str, frozenset - or tuples of those, etc.)
     """
-    pass
+    lines = (line.decode(encoding) for line in path)
+    return parse_edgelist(lines,
+                          comments=comments,
+                          delimiter=delimiter,
+                          create_using=create_using,
+                          nodetype=nodetype,
+                          data=data)
 
 
 def write_weighted_edgelist(G, path, comments='#', delimiter=' ', encoding=
@@ -316,7 +382,8 @@ def write_weighted_edgelist(G, path, comments='#', delimiter=' ', encoding=
     write_edgelist
     read_weighted_edgelist
     """
-    pass
+    write_edgelist(G, path, comments=comments, delimiter=delimiter,
+                   data=['weight'], encoding=encoding)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -366,4 +433,10 @@ def read_weighted_edgelist(path, comments='#', delimiter=None, create_using
     --------
     write_weighted_edgelist
     """
-    pass
+    return read_edgelist(path,
+                         comments=comments,
+                         delimiter=delimiter,
+                         create_using=create_using,
+                         nodetype=nodetype,
+                         data=(('weight', float),),
+                         encoding=encoding)
