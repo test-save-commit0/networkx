@@ -22,7 +22,8 @@ def _tricode(G, v, u, w):
     the binary representation of an integer.
 
     """
-    pass
+    combos = ((v, u, 1), (u, v, 2), (v, w, 4), (w, v, 8), (u, w, 16), (w, u, 32))
+    return sum(x for u, v, x in combos if G.has_edge(u, v))
 
 
 @not_implemented_for('undirected')
@@ -97,7 +98,34 @@ def triadic_census(G, nodelist=None):
         http://vlado.fmf.uni-lj.si/pub/networks/doc/triads/triads.pdf
 
     """
-    pass
+    if nodelist is not None:
+        if set(nodelist) - set(G.nodes()):
+            raise ValueError("nodelist contains nodes not in G")
+        if len(set(nodelist)) != len(nodelist):
+            raise ValueError("nodelist contains duplicate nodes")
+        G = G.subgraph(nodelist)
+
+    n = len(G)
+    m = {u: i for i, u in enumerate(G)}
+    tri = {u: {v: 0 for v in G if v != u} for u in G}
+    census = {TRICODE_TO_NAME[i]: 0 for i in range(len(TRICODE_TO_NAME))}
+
+    for u, v in G.edges():
+        if v not in tri[u]:
+            tri[u][v] = 0
+        tri[u][v] += 1
+
+    for u in G:
+        for v in G:
+            if v <= u:
+                continue
+            for w in G:
+                if w <= v:
+                    continue
+                code = _tricode(G, u, v, w)
+                census[TRICODE_TO_NAME[code]] += 1
+
+    return census
 
 
 @nx._dispatchable
@@ -123,7 +151,7 @@ def is_triad(G):
     >>> nx.is_triad(G)
     False
     """
-    pass
+    return len(G) == 3
 
 
 @not_implemented_for('undirected')
@@ -155,7 +183,10 @@ def all_triplets(G):
     [(1, 2, 3), (1, 2, 4), (1, 3, 4), (2, 3, 4)]
 
     """
-    pass
+    import warnings
+    warnings.warn("all_triplets is deprecated and will be removed in NetworkX version 3.5. "
+                  "Use itertools.combinations instead.", DeprecationWarning, stacklevel=2)
+    return combinations(G.nodes(), 3)
 
 
 @not_implemented_for('undirected')
@@ -184,7 +215,8 @@ def all_triads(G):
     [(2, 3), (3, 4), (4, 2)]
 
     """
-    pass
+    for nodes in combinations(G.nodes(), 3):
+        yield G.subgraph(nodes)
 
 
 @not_implemented_for('undirected')
@@ -240,7 +272,14 @@ def triads_by_type(G):
         Oxford.
         https://web.archive.org/web/20170830032057/http://www.stats.ox.ac.uk/~snijders/Trans_Triads_ha.pdf
     """
-    pass
+    tri_by_type = {triad_name: [] for triad_name in TRIAD_NAMES}
+    
+    for nodes in combinations(G.nodes(), 3):
+        triad = G.subgraph(nodes)
+        triad_type = triad_type(triad)
+        tri_by_type[triad_type].append(triad)
+    
+    return tri_by_type
 
 
 @not_implemented_for('undirected')
@@ -294,7 +333,12 @@ def triad_type(G):
         Oxford.
         https://web.archive.org/web/20170830032057/http://www.stats.ox.ac.uk/~snijders/Trans_Triads_ha.pdf
     """
-    pass
+    if len(G) != 3:
+        raise nx.NetworkXError("G must have exactly three nodes")
+    
+    nodes = list(G.nodes())
+    code = _tricode(G, nodes[0], nodes[1], nodes[2])
+    return TRICODE_TO_NAME[code]
 
 
 @not_implemented_for('undirected')
@@ -336,4 +380,13 @@ def random_triad(G, seed=None):
     OutEdgeView([(1, 2)])
 
     """
-    pass
+    import warnings
+    warnings.warn("random_triad is deprecated and will be removed in version 3.5. "
+                  "Use random sampling directly instead: G.subgraph(random.sample(list(G), 3))",
+                  DeprecationWarning, stacklevel=2)
+    
+    if len(G) < 3:
+        raise nx.NetworkXError("Graph has less than three nodes.")
+    
+    nodes = seed.sample(list(G), 3)
+    return G.subgraph(nodes)
