@@ -33,7 +33,36 @@ def root_trees(t1, root1, t2, root2):
     # t1 is numbers from 1 ... n
     # t2 is numbered from n+1 to 2n
     """
-    pass
+    dT = nx.DiGraph()
+    dT.add_node(0)  # Add the fake root node
+
+    def add_tree(T, root, start):
+        mapping = {root: start}
+        stack = [(root, start)]
+        next_id = start + 1
+
+        while stack:
+            parent, parent_id = stack.pop()
+            for child in T.neighbors(parent):
+                if child not in mapping:
+                    mapping[child] = next_id
+                    dT.add_edge(parent_id, next_id)
+                    stack.append((child, next_id))
+                    next_id += 1
+
+        return mapping
+
+    t1_mapping = add_tree(t1, root1, 1)
+    t2_mapping = add_tree(t2, root2, len(t1) + 1)
+
+    dT.add_edge(0, 1)  # Connect fake root to t1's root
+    dT.add_edge(0, len(t1) + 1)  # Connect fake root to t2's root
+
+    nx.set_node_attributes(dT, {0: {"tree": "root"}})
+    nx.set_node_attributes(dT, {v: {"tree": "t1", "original": k} for k, v in t1_mapping.items()})
+    nx.set_node_attributes(dT, {v: {"tree": "t2", "original": k} for k, v in t2_mapping.items()})
+
+    return dT
 
 
 @nx._dispatchable(graphs={'t1': 0, 't2': 2})
@@ -78,7 +107,45 @@ def rooted_tree_isomorphism(t1, root1, t2, root2):
 
         If `t1` and `t2` are not isomorphic, then it returns the empty list.
     """
-    pass
+    def tree_hash(T, root):
+        labels = {}
+        stack = [(root, None)]
+        while stack:
+            node, parent = stack.pop()
+            children = [child for child in T.neighbors(node) if child != parent]
+            if not children:
+                labels[node] = '()'
+            else:
+                stack.extend((child, node) for child in children)
+        
+        while len(labels) < len(T):
+            for node in T:
+                if node not in labels:
+                    children = [child for child in T.neighbors(node) if child != parent]
+                    if all(child in labels for child in children):
+                        labels[node] = '(' + ','.join(sorted(labels[child] for child in children)) + ')'
+        
+        return labels[root]
+
+    if tree_hash(t1, root1) != tree_hash(t2, root2):
+        return []
+
+    isomorphism = []
+    stack = [(root1, root2)]
+    while stack:
+        n1, n2 = stack.pop()
+        isomorphism.append((n1, n2))
+        children1 = [c for c in t1.neighbors(n1) if c not in dict(isomorphism)]
+        children2 = [c for c in t2.neighbors(n2) if c not in dict(isomorphism).values()]
+        
+        if len(children1) != len(children2):
+            return []
+        
+        children1.sort(key=lambda x: tree_hash(t1, x))
+        children2.sort(key=lambda x: tree_hash(t2, x))
+        stack.extend(zip(children1, children2))
+
+    return isomorphism
 
 
 @not_implemented_for('directed')
@@ -117,4 +184,24 @@ def tree_isomorphism(t1, t2):
     -----
     This runs in O(n*log(n)) time for trees with n nodes.
     """
-    pass
+    if len(t1) != len(t2):
+        return []
+
+    def find_center(T):
+        if len(T) <= 2:
+            return list(T.nodes())[0]
+        leaves = [n for n in T.nodes() if T.degree(n) == 1]
+        while len(T) > 2:
+            new_leaves = []
+            for leaf in leaves:
+                neighbor = list(T.neighbors(leaf))[0]
+                T.remove_node(leaf)
+                if T.degree(neighbor) == 1:
+                    new_leaves.append(neighbor)
+            leaves = new_leaves
+        return leaves[0]
+
+    center1 = find_center(t1.copy())
+    center2 = find_center(t2.copy())
+
+    return rooted_tree_isomorphism(t1, center1, t2, center2)
