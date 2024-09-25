@@ -54,7 +54,12 @@ def connected_components(G):
     For undirected graphs only.
 
     """
-    pass
+    seen = set()
+    for v in G:
+        if v not in seen:
+            c = set(_plain_bfs(G, v))
+            yield c
+            seen.update(c)
 
 
 @not_implemented_for('directed')
@@ -94,7 +99,7 @@ def number_connected_components(G):
     For undirected graphs only.
 
     """
-    pass
+    return sum(1 for _ in connected_components(G))
 
 
 @not_implemented_for('directed')
@@ -136,7 +141,9 @@ def is_connected(G):
     For undirected graphs only.
 
     """
-    pass
+    if len(G) == 0:
+        raise nx.NetworkXPointlessConcept("Connectivity is undefined for the null graph.")
+    return len(set(_plain_bfs(G, arbitrary_element(G)))) == len(G)
 
 
 @not_implemented_for('directed')
@@ -177,9 +184,18 @@ def node_connected_component(G, n):
     For undirected graphs only.
 
     """
-    pass
+    return set(_plain_bfs(G, n))
 
 
 def _plain_bfs(G, source):
     """A fast BFS node generator"""
-    pass
+    seen = set()
+    nextlevel = {source}
+    while nextlevel:
+        thislevel = nextlevel
+        nextlevel = set()
+        for v in thislevel:
+            if v not in seen:
+                yield v
+                seen.add(v)
+                nextlevel.update(G[v])
