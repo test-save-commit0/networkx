@@ -69,7 +69,21 @@ def degree_centrality(G, nodes):
         of Social Network Analysis. Sage Publications.
         https://dx.doi.org/10.4135/9781446294413.n28
     """
-    pass
+    if not set(nodes).issubset(G):
+        raise nx.NetworkXError("All nodes in nodes must be in G")
+    
+    n = len(nodes)
+    m = len(G) - n
+    if m == 0:
+        raise nx.NetworkXError("Cannot compute centrality for a one-mode graph.")
+
+    centrality = {}
+    for v in G:
+        if v in nodes:
+            centrality[v] = G.degree(v) / m
+        else:
+            centrality[v] = G.degree(v) / n
+    return centrality
 
 
 @nx._dispatchable(name='bipartite_betweenness_centrality')
@@ -152,7 +166,35 @@ def betweenness_centrality(G, nodes):
         of Social Network Analysis. Sage Publications.
         https://dx.doi.org/10.4135/9781446294413.n28
     """
-    pass
+    import networkx as nx
+    from networkx.algorithms.centrality import betweenness_centrality as nx_betweenness
+
+    if not set(nodes).issubset(G):
+        raise nx.NetworkXError("All nodes in nodes must be in G")
+
+    n = len(nodes)
+    m = len(G) - n
+    if m == 0:
+        raise nx.NetworkXError("Cannot compute centrality for a one-mode graph.")
+
+    betweenness = nx_betweenness(G)
+
+    # Normalize the betweenness values
+    def normalize_u(v):
+        s, t = divmod(n - 1, m)
+        return (m**2 * (s + 1)**2 + m * (s + 1) * (2*t - s - 1) - t * (2*s - t + 3)) / 2
+
+    def normalize_v(v):
+        p, r = divmod(m - 1, n)
+        return (n**2 * (p + 1)**2 + n * (p + 1) * (2*r - p - 1) - r * (2*p - r + 3)) / 2
+
+    for v in G:
+        if v in nodes:
+            betweenness[v] /= normalize_u(v)
+        else:
+            betweenness[v] /= normalize_v(v)
+
+    return betweenness
 
 
 @nx._dispatchable(name='bipartite_closeness_centrality')
@@ -234,4 +276,32 @@ def closeness_centrality(G, nodes, normalized=True):
         of Social Network Analysis. Sage Publications.
         https://dx.doi.org/10.4135/9781446294413.n28
     """
-    pass
+    import networkx as nx
+
+    if not set(nodes).issubset(G):
+        raise nx.NetworkXError("All nodes in nodes must be in G")
+
+    closeness = {}
+    path_length = nx.single_source_shortest_path_length
+    n = len(nodes)
+    m = len(G) - n
+    if m == 0:
+        raise nx.NetworkXError("Cannot compute centrality for a one-mode graph.")
+
+    def normalize(v, length, count):
+        if v in nodes:
+            return (m + 2 * (n - 1)) / length
+        else:
+            return (n + 2 * (m - 1)) / length
+
+    for v in G:
+        sp = dict(path_length(G, v))
+        totsp = sum(sp.values())
+        len_G = len(G)
+        _closeness = normalize(v, totsp, len_G - 1)
+        if normalized:
+            s = (len(sp) - 1) / (len_G - 1)
+            _closeness *= s
+        closeness[v] = _closeness
+
+    return closeness
