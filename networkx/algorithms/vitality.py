@@ -64,4 +64,26 @@ def closeness_vitality(G, node=None, weight=None, wiener_index=None):
            <http://books.google.com/books?id=TTNhSm7HYrIC>
 
     """
-    pass
+    if wiener_index is None:
+        wiener_index = nx.wiener_index(G, weight=weight)
+
+    if node is not None:
+        return _single_node_closeness_vitality(G, node, weight, wiener_index)
+
+    vitality = {}
+    for n in G:
+        vitality[n] = _single_node_closeness_vitality(G, n, weight, wiener_index)
+    return vitality
+
+def _single_node_closeness_vitality(G, node, weight, wiener_index):
+    if G.number_of_nodes() <= 1:
+        return 0.0
+
+    try:
+        H = G.copy()
+        H.remove_node(node)
+        new_wiener_index = nx.wiener_index(H, weight=weight)
+        return wiener_index - new_wiener_index
+    except nx.NetworkXError:
+        # The graph is disconnected after removing the node
+        return float('-inf')
