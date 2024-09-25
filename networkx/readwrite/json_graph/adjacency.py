@@ -53,7 +53,32 @@ def adjacency_data(G, attrs=_attrs):
     --------
     adjacency_graph, node_link_data, tree_data
     """
-    pass
+    if len(set(attrs.values())) < len(attrs):
+        raise nx.NetworkXError("Attribute names are not unique.")
+
+    data = {"directed": G.is_directed(), "multigraph": G.is_multigraph(), "graph": G.graph}
+    data["nodes"] = []
+    data["adjacency"] = []
+
+    for n, nbrs in G.adjacency():
+        node_data = {attrs['id']: n}
+        node_data.update(G.nodes[n])
+        data["nodes"].append(node_data)
+
+        adj_data = []
+        for nbr, edge_data in nbrs.items():
+            adj = {attrs['id']: nbr}
+            if G.is_multigraph():
+                for key, edata in edge_data.items():
+                    link = {attrs['key']: key}
+                    link.update(edata)
+                    adj[attrs['key']] = link
+            else:
+                adj.update(edge_data)
+            adj_data.append(adj)
+        data["adjacency"].append(adj_data)
+
+    return data
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -97,4 +122,29 @@ def adjacency_graph(data, directed=False, multigraph=True, attrs=_attrs):
     --------
     adjacency_graph, node_link_data, tree_data
     """
-    pass
+    multigraph = data.get('multigraph', multigraph)
+    directed = data.get('directed', directed)
+    if multigraph:
+        graph = nx.MultiGraph()
+    else:
+        graph = nx.Graph()
+    if directed:
+        graph = graph.to_directed()
+
+    graph.graph = data.get('graph', {})
+    nodes = data['nodes'] if 'nodes' in data else []
+    adjacency = data['adjacency'] if 'adjacency' in data else []
+
+    for node_data, adj_data in zip(nodes, adjacency):
+        node = node_data[attrs['id']]
+        graph.add_node(node, **{k: v for k, v in node_data.items() if k != attrs['id']})
+        for edge in adj_data:
+            target = edge[attrs['id']]
+            edge_data = {k: v for k, v in edge.items() if k != attrs['id']}
+            if multigraph:
+                key = edge_data.pop(attrs['key'], None)
+                graph.add_edge(node, target, key=key, **edge_data)
+            else:
+                graph.add_edge(node, target, **edge_data)
+
+    return graph
