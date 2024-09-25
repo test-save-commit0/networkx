@@ -159,26 +159,62 @@ class MappedQueue:
 
     def _heapify(self):
         """Restore heap invariant and recalculate map."""
-        pass
+        self.position = {elt.element: pos for pos, elt in enumerate(self.heap)}
+        heapq.heapify(self.heap)
+        self.position = {elt.element: pos for pos, elt in enumerate(self.heap)}
 
     def __len__(self):
         return len(self.heap)
 
     def push(self, elt, priority=None):
         """Add an element to the queue."""
-        pass
+        if elt not in self.position:
+            if priority is None:
+                priority = elt
+            heap_elt = _HeapElement(priority, elt)
+            heapq.heappush(self.heap, heap_elt)
+            self.position[elt] = len(self.heap) - 1
+            return True
+        return False
 
     def pop(self):
         """Remove and return the smallest element in the queue."""
-        pass
+        if self.heap:
+            elt = heapq.heappop(self.heap)
+            del self.position[elt.element]
+            if self.heap:
+                self.position[self.heap[0].element] = 0
+            return elt
+        raise IndexError("pop from an empty priority queue")
 
     def update(self, elt, new, priority=None):
         """Replace an element in the queue with a new one."""
-        pass
+        if elt in self.position:
+            pos = self.position.pop(elt)
+            if priority is None:
+                priority = new
+            self.heap[pos] = _HeapElement(priority, new)
+            self.position[new] = pos
+            if pos > 0 and self.heap[pos] < self.heap[(pos - 1) // 2]:
+                self._siftdown(0, pos)
+            else:
+                self._siftup(pos)
+        else:
+            self.push(new, priority)
 
     def remove(self, elt):
         """Remove an element from the queue."""
-        pass
+        if elt in self.position:
+            pos = self.position.pop(elt)
+            if pos == len(self.heap) - 1:
+                self.heap.pop()
+            else:
+                self.heap[pos] = self.heap.pop()
+                self.position[self.heap[pos].element] = pos
+                if pos > 0 and self.heap[pos] < self.heap[(pos - 1) // 2]:
+                    self._siftdown(0, pos)
+                else:
+                    self._siftup(pos)
 
     def _siftup(self, pos):
         """Move smaller child up until hitting a leaf.
@@ -186,7 +222,21 @@ class MappedQueue:
         Built to mimic code for heapq._siftup
         only updating position dict too.
         """
-        pass
+        end_pos = len(self.heap)
+        start_pos = pos
+        new_item = self.heap[pos]
+        child_pos = 2 * pos + 1
+        while child_pos < end_pos:
+            right_pos = child_pos + 1
+            if right_pos < end_pos and not self.heap[child_pos] < self.heap[right_pos]:
+                child_pos = right_pos
+            self.heap[pos] = self.heap[child_pos]
+            self.position[self.heap[pos].element] = pos
+            pos = child_pos
+            child_pos = 2 * pos + 1
+        self.heap[pos] = new_item
+        self.position[new_item.element] = pos
+        self._siftdown(start_pos, pos)
 
     def _siftdown(self, start_pos, pos):
         """Restore invariant. keep swapping with parent until smaller.
@@ -194,4 +244,15 @@ class MappedQueue:
         Built to mimic code for heapq._siftdown
         only updating position dict too.
         """
-        pass
+        new_item = self.heap[pos]
+        while pos > start_pos:
+            parent_pos = (pos - 1) >> 1
+            parent = self.heap[parent_pos]
+            if new_item < parent:
+                self.heap[pos] = parent
+                self.position[parent.element] = pos
+                pos = parent_pos
+                continue
+            break
+        self.heap[pos] = new_item
+        self.position[new_item.element] = pos
