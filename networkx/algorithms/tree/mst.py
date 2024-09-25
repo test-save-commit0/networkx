@@ -64,7 +64,44 @@ def boruvka_mst_edges(G, minimum=True, weight='weight', keys=False, data=
         If `ignore_nan is True` then that edge is ignored instead.
 
     """
-    pass
+    if G.is_multigraph():
+        raise nx.NetworkXNotImplemented("Borůvka's algorithm not implemented for multigraphs.")
+
+    # Initialize each node as a separate component
+    components = UnionFind()
+    for node in G:
+        components[node]
+
+    # Function to get the weight of an edge
+    def get_weight(edge):
+        return G.edges[edge].get(weight, 1)
+
+    # Main Borůvka's algorithm loop
+    while len(components.to_sets()) > 1:
+        # Find the minimum weight edge for each component
+        min_edges = {}
+        for u, v, d in G.edges(data=True):
+            if components[u] != components[v]:
+                w = d.get(weight, 1)
+                if ignore_nan and isnan(w):
+                    continue
+                if minimum:
+                    key = components[u]
+                    if key not in min_edges or w < get_weight(min_edges[key]):
+                        min_edges[key] = (u, v, d)
+                else:
+                    key = components[u]
+                    if key not in min_edges or w > get_weight(min_edges[key]):
+                        min_edges[key] = (u, v, d)
+
+        # Add the minimum weight edges to the MST
+        for u, v, d in min_edges.values():
+            if components[u] != components[v]:
+                components.union(u, v)
+                if data:
+                    yield (u, v, d)
+                else:
+                    yield (u, v)
 
 
 @nx._dispatchable(edge_attrs={'weight': None, 'partition': None},
@@ -111,7 +148,40 @@ def kruskal_mst_edges(G, minimum, weight='weight', keys=True, data=True,
         take the following forms: `(u, v)`, `(u, v, d)` or `(u, v, k, d)`
         depending on the `key` and `data` parameters
     """
-    pass
+    subtrees = UnionFind()
+    edges = sorted(G.edges(data=True, keys=keys),
+                   key=lambda t: t[2].get(weight, 1),
+                   reverse=not minimum)
+
+    for edge in edges:
+        if len(edge) == 4:
+            u, v, k, d = edge
+        else:
+            u, v, d = edge
+            k = None
+
+        if partition is not None:
+            part = d.get(partition, EdgePartition.OPEN)
+            if part == EdgePartition.EXCLUDED:
+                continue
+            elif part == EdgePartition.INCLUDED:
+                if subtrees[u] != subtrees[v]:
+                    subtrees.union(u, v)
+                    if keys and G.is_multigraph():
+                        yield (u, v, k, d) if data else (u, v, k)
+                    else:
+                        yield (u, v, d) if data else (u, v)
+                continue
+
+        w = d.get(weight, 1)
+        if ignore_nan and isnan(w):
+            continue
+        if subtrees[u] != subtrees[v]:
+            subtrees.union(u, v)
+            if keys and G.is_multigraph():
+                yield (u, v, k, d) if data else (u, v, k)
+            else:
+                yield (u, v, d) if data else (u, v)
 
 
 @nx._dispatchable(edge_attrs='weight', preserve_edge_attrs='data')
@@ -144,7 +214,57 @@ def prim_mst_edges(G, minimum, weight='weight', keys=True, data=True,
         If `ignore_nan is True` then that edge is ignored instead.
 
     """
-    pass
+    if G.is_directed():
+        raise nx.NetworkXError(
+            "Prim's algorithm is not implemented for directed graphs."
+        )
+
+    push = heappush
+    pop = heappop
+
+    nodes = set(G)
+    c = count()
+
+    sign = 1 if minimum else -1
+
+    while nodes:
+        u = nodes.pop()
+        frontier = []
+        visited = {u}
+
+        for v, d in G.adj[u].items():
+            wt = d.get(weight, 1)
+            if ignore_nan and isnan(wt):
+                continue
+            push(frontier, (sign * wt, next(c), u, v, d))
+
+        while frontier:
+            W, _, u, v, d = pop(frontier)
+            if v in visited:
+                continue
+            visited.add(v)
+            nodes.discard(v)
+
+            if data:
+                if G.is_multigraph() and keys:
+                    k = min(G[u][v], key=lambda k: sign * G[u][v][k].get(weight, 1))
+                    yield u, v, k, d
+                else:
+                    yield u, v, d
+            else:
+                if G.is_multigraph() and keys:
+                    k = min(G[u][v], key=lambda k: sign * G[u][v][k].get(weight, 1))
+                    yield u, v, k
+                else:
+                    yield u, v
+
+            for w, d2 in G.adj[v].items():
+                if w in visited:
+                    continue
+                wt = d2.get(weight, 1)
+                if ignore_nan and isnan(wt):
+                    continue
+                push(frontier, (sign * wt, next(c), v, w, d2))
 
 
 ALGORITHMS = {'boruvka': boruvka_mst_edges, 'borůvka': boruvka_mst_edges,
@@ -234,7 +354,17 @@ def minimum_spanning_edges(G, algorithm='kruskal', weight='weight', keys=
     http://www.ics.uci.edu/~eppstein/PADS/
 
     """
-    pass
+    if algorithm.lower() == 'kruskal':
+        algo = partial(kruskal_mst_edges, minimum=True, ignore_nan=ignore_nan)
+    elif algorithm.lower() == 'prim':
+        algo = partial(prim_mst_edges, minimum=True, ignore_nan=ignore_nan)
+    elif algorithm.lower() in ('boruvka', 'borůvka'):
+        algo = partial(boruvka_mst_edges, minimum=True, ignore_nan=ignore_nan)
+    else:
+        msg = f"{algorithm} is not a valid choice for an algorithm."
+        raise ValueError(msg)
+
+    return algo(G, weight=weight, keys=keys, data=data)
 
 
 @not_implemented_for('directed')
@@ -319,7 +449,17 @@ def maximum_spanning_edges(G, algorithm='kruskal', weight='weight', keys=
     Modified code from David Eppstein, April 2006
     http://www.ics.uci.edu/~eppstein/PADS/
     """
-    pass
+    if algorithm.lower() == 'kruskal':
+        algo = partial(kruskal_mst_edges, minimum=False, ignore_nan=ignore_nan)
+    elif algorithm.lower() == 'prim':
+        algo = partial(prim_mst_edges, minimum=False, ignore_nan=ignore_nan)
+    elif algorithm.lower() in ('boruvka', 'borůvka'):
+        algo = partial(boruvka_mst_edges, minimum=False, ignore_nan=ignore_nan)
+    else:
+        msg = f"{algorithm} is not a valid choice for an algorithm."
+        raise ValueError(msg)
+
+    return algo(G, weight=weight, keys=keys, data=data)
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -373,7 +513,17 @@ def minimum_spanning_tree(G, weight='weight', algorithm='kruskal',
     Isolated nodes with self-loops are in the tree as edgeless isolated nodes.
 
     """
-    pass
+    T = G.__class__()
+    T.add_nodes_from(G.nodes(data=True))
+    if G.number_of_edges() == 0:
+        return T
+
+    for u, v, d in minimum_spanning_edges(
+        G, algorithm=algorithm, weight=weight, data=True, ignore_nan=ignore_nan
+    ):
+        T.add_edge(u, v, **d)
+
+    return T
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -423,7 +573,22 @@ def partition_spanning_tree(G, minimum=True, weight='weight', partition=
            Vol. 25 (2), p. 219-229,
            https://www.scielo.br/j/pope/a/XHswBwRwJyrfL88dmMwYNWp/?lang=en
     """
-    pass
+    T = G.__class__()
+    T.add_nodes_from(G.nodes(data=True))
+
+    edges = kruskal_mst_edges(
+        G,
+        minimum,
+        weight=weight,
+        keys=True,
+        data=True,
+        ignore_nan=ignore_nan,
+        partition=partition,
+    )
+
+    T.add_edges_from(edges)
+
+    return T
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -479,7 +644,17 @@ def maximum_spanning_tree(G, weight='weight', algorithm='kruskal',
     Isolated nodes with self-loops are in the tree as edgeless isolated nodes.
 
     """
-    pass
+    T = G.__class__()
+    T.add_nodes_from(G.nodes(data=True))
+    if G.number_of_edges() == 0:
+        return T
+
+    for u, v, d in maximum_spanning_edges(
+        G, algorithm=algorithm, weight=weight, data=True, ignore_nan=ignore_nan
+    ):
+        T.add_edge(u, v, **d)
+
+    return T
 
 
 @py_random_state(3)
@@ -640,7 +815,32 @@ class SpanningTreeIterator:
         partition_tree : nx.Graph
             The minimum spanning tree of the input partition.
         """
-        pass
+        sign = 1 if self.minimum else -1
+        for u, v, d in self.G.edges(data=True):
+            if (u, v) in partition_tree.edges() or (v, u) in partition_tree.edges():
+                continue
+            new_partition = partition.__copy__()
+            new_partition.partition_dict[(u, v)] = EdgePartition.EXCLUDED
+            new_partition.mst_weight = sign * partition_spanning_tree(
+                self.G,
+                minimum=self.minimum,
+                weight=self.weight,
+                partition=self.partition_key,
+                ignore_nan=self.ignore_nan
+            ).size(weight=self.weight)
+            self.partition_queue.put(new_partition)
+
+            if d.get(self.partition_key, EdgePartition.OPEN) == EdgePartition.OPEN:
+                new_partition = partition.__copy__()
+                new_partition.partition_dict[(u, v)] = EdgePartition.INCLUDED
+                new_partition.mst_weight = sign * partition_spanning_tree(
+                    self.G,
+                    minimum=self.minimum,
+                    weight=self.weight,
+                    partition=self.partition_key,
+                    ignore_nan=self.ignore_nan
+                ).size(weight=self.weight)
+                self.partition_queue.put(new_partition)
 
     def _write_partition(self, partition):
         """
@@ -653,13 +853,15 @@ class SpanningTreeIterator:
             A Partition dataclass describing a partition on the edges of the
             graph.
         """
-        pass
+        for (u, v), part in partition.partition_dict.items():
+            self.G[u][v][self.partition_key] = part
 
     def _clear_partition(self, G):
         """
         Removes partition data from the graph
         """
-        pass
+        for u, v, d in G.edges(data=True):
+            d.pop(self.partition_key, None)
 
 
 @nx._dispatchable(edge_attrs='weight')
