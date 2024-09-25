@@ -71,12 +71,14 @@ def generate_multiline_adjlist(G, delimiter=' '):
     --------
     write_multiline_adjlist, read_multiline_adjlist
     """
-    pass
+    for s, nbrs in G.adjacency():
+        yield f"{s}{delimiter}{len(nbrs)}"
+        for t, data in nbrs.items():
+            yield f"{t}{delimiter}{data}"
 
 
 @open_file(1, mode='wb')
-def write_multiline_adjlist(G, path, delimiter=' ', comments='#', encoding=
-    'utf-8'):
+def write_multiline_adjlist(G, path, delimiter=' ', comments='#', encoding='utf-8'):
     """Write the graph G in multiline adjacency list format to path
 
     Parameters
@@ -115,7 +117,9 @@ def write_multiline_adjlist(G, path, delimiter=' ', comments='#', encoding=
     --------
     read_multiline_adjlist
     """
-    pass
+    for line in generate_multiline_adjlist(G, delimiter):
+        line += '\n'
+        path.write(line.encode(encoding))
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -162,13 +166,60 @@ def parse_multiline_adjlist(lines, comments='#', delimiter=None,
     [1, 2, 3, 5]
 
     """
-    pass
+    from ast import literal_eval
+    G = nx.empty_graph(0, create_using)
+    for line in filter(lambda x: not x.startswith(comments), lines):
+        p = line.find(comments)
+        if p >= 0:
+            line = line[:p]
+        if not line:
+            continue
+        try:
+            (u, deg) = line.strip().split(delimiter)
+            deg = int(deg)
+        except Exception as e:
+            raise TypeError(f"Failed to read node and degree on line ({line})") from e
+        if nodetype is not None:
+            try:
+                u = nodetype(u)
+            except Exception as e:
+                raise TypeError(f"Failed to convert node ({u}) to type {nodetype}") from e
+        G.add_node(u)
+        for i in range(deg):
+            while True:
+                try:
+                    line = next(lines)
+                except StopIteration as e:
+                    msg = f"Failed to find neighbor for node ({u})"
+                    raise TypeError(msg) from e
+                p = line.find(comments)
+                if p >= 0:
+                    line = line[:p]
+                if line:
+                    break
+            vlist = line.strip().split(delimiter)
+            v = vlist.pop(0)
+            data = {}
+            if vlist:
+                data = literal_eval(delimiter.join(vlist))
+            if nodetype is not None:
+                try:
+                    v = nodetype(v)
+                except Exception as e:
+                    raise TypeError(f"Failed to convert node ({v}) to type {nodetype}") from e
+            if edgetype is not None:
+                try:
+                    data = edgetype(data)
+                except Exception as e:
+                    raise TypeError(f"Failed to convert edge data ({data}) to type {edgetype}") from e
+            G.add_edge(u, v, **data)
+    return G
 
 
 @open_file(0, mode='rb')
 @nx._dispatchable(graphs=None, returns_graph=True)
-def read_multiline_adjlist(path, comments='#', delimiter=None, create_using
-    =None, nodetype=None, edgetype=None, encoding='utf-8'):
+def read_multiline_adjlist(path, comments='#', delimiter=None, create_using=None,
+                           nodetype=None, edgetype=None, encoding='utf-8'):
     """Read graph in multi-line adjacency list format from path.
 
     Parameters
@@ -240,4 +291,12 @@ def read_multiline_adjlist(path, comments='#', delimiter=None, create_using
     --------
     write_multiline_adjlist
     """
-    pass
+    lines = (line.decode(encoding) for line in path)
+    return parse_multiline_adjlist(
+        lines,
+        comments=comments,
+        delimiter=delimiter,
+        create_using=create_using,
+        nodetype=nodetype,
+        edgetype=edgetype,
+    )
