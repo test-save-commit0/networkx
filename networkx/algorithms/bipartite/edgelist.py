@@ -74,7 +74,7 @@ def write_edgelist(G, path, comments='#', delimiter=' ', data=True,
     write_edgelist
     generate_edgelist
     """
-    pass
+    nx.write_edgelist(G, path, comments=comments, delimiter=delimiter, data=data, encoding=encoding)
 
 
 @not_implemented_for('directed')
@@ -126,7 +126,17 @@ def generate_edgelist(G, delimiter=' ', data=True):
     2 1 3
     2 3
     """
-    pass
+    for u, v, d in G.edges(data=True):
+        if data is False:
+            yield f"{u}{delimiter}{v}"
+        elif data is True:
+            yield f"{u}{delimiter}{v}{delimiter}{d}"
+        else:
+            edge_data = ' '.join(str(d.get(k, '')) for k in data if k in d)
+            if edge_data:
+                yield f"{u}{delimiter}{v}{delimiter}{edge_data}"
+            else:
+                yield f"{u}{delimiter}{v}"
 
 
 @nx._dispatchable(name='bipartite_parse_edgelist', graphs=None,
@@ -192,7 +202,14 @@ def parse_edgelist(lines, comments='#', delimiter=None, create_using=None,
     See Also
     --------
     """
-    pass
+    G = nx.parse_edgelist(lines, comments=comments, delimiter=delimiter, create_using=create_using,
+                          nodetype=nodetype, data=data)
+    
+    # Assign bipartite attribute to nodes
+    for i, node in enumerate(G.nodes()):
+        G.nodes[node]['bipartite'] = i % 2
+    
+    return G
 
 
 @open_file(0, mode='rb')
@@ -269,4 +286,11 @@ def read_edgelist(path, comments='#', delimiter=None, create_using=None,
     Since nodes must be hashable, the function nodetype must return hashable
     types (e.g. int, float, str, frozenset - or tuples of those, etc.)
     """
-    pass
+    G = nx.read_edgelist(path, comments=comments, delimiter=delimiter, create_using=create_using,
+                         nodetype=nodetype, data=data, edgetype=edgetype, encoding=encoding)
+    
+    # Assign bipartite attribute to nodes
+    for i, node in enumerate(G.nodes()):
+        G.nodes[node]['bipartite'] = i % 2
+    
+    return G
