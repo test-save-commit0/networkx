@@ -41,4 +41,21 @@ def flow_hierarchy(G, weight=None):
        DOI: 10.1002/cplx.20368
        http://web.mit.edu/~cmagee/www/documents/28-DetectingEvolvingPatterns_FlowHierarchy.pdf
     """
-    pass
+    if not G.is_directed():
+        raise nx.NetworkXError("Flow hierarchy is not defined for undirected graphs.")
+
+    # Find strongly connected components
+    scc = nx.strongly_connected_components(G)
+    scc_subgraphs = [G.subgraph(c) for c in scc]
+
+    # Count edges in cycles (i.e., in strongly connected components with more than one node)
+    edges_in_cycles = sum(sg.number_of_edges() for sg in scc_subgraphs if len(sg) > 1)
+
+    # Count total number of edges
+    total_edges = G.number_of_edges()
+
+    # Calculate flow hierarchy
+    if total_edges == 0:
+        return 1.0  # By convention, an empty graph has perfect hierarchy
+
+    return 1 - (edges_in_cycles / total_edges)
