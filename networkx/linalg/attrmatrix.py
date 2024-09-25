@@ -29,7 +29,12 @@ def _node_value(G, node_attr):
         returns a value from G.nodes[u] that depends on `edge_attr`.
 
     """
-    pass
+    if node_attr is None:
+        return lambda u: u
+    elif callable(node_attr):
+        return lambda u: node_attr(G.nodes[u])
+    else:
+        return lambda u: G.nodes[u].get(node_attr, None)
 
 
 def _edge_value(G, edge_attr):
@@ -62,7 +67,15 @@ def _edge_value(G, edge_attr):
         return a value from G[u][v] that depends on `edge_attr`.
 
     """
-    pass
+    if edge_attr is None:
+        return lambda u, v: 1
+    elif callable(edge_attr):
+        return lambda u, v: edge_attr(G[u][v])
+    else:
+        if G.is_multigraph():
+            return lambda u, v: sum(d.get(edge_attr, 1) for d in G[u][v].values())
+        else:
+            return lambda u, v: G[u][v].get(edge_attr, 1)
 
 
 @nx._dispatchable(edge_attrs={'edge_attr': None}, node_attrs='node_attr')
@@ -185,7 +198,34 @@ def attr_matrix(G, edge_attr=None, node_attr=None, normalized=False,
         (blue, blue) is 0   # there are no edges with blue endpoints
 
     """
-    pass
+    import numpy as np
+
+    edge_value = _edge_value(G, edge_attr)
+    node_value = _node_value(G, node_attr)
+
+    if rc_order is None:
+        ordering = list(set(node_value(n) for n in G))
+        ordering.sort()
+    else:
+        ordering = rc_order
+
+    N = len(ordering)
+    index = dict(zip(ordering, range(N)))
+    M = np.zeros((N, N), dtype=dtype, order=order)
+
+    for u, v in G.edges():
+        i, j = index[node_value(u)], index[node_value(v)]
+        M[i, j] += edge_value(u, v)
+        if not G.is_directed():
+            M[j, i] = M[i, j]
+
+    if normalized:
+        M = M / (M.sum(axis=1)[:, np.newaxis] + 1e-10)
+
+    if rc_order is None:
+        return M, ordering
+    else:
+        return M
 
 
 @nx._dispatchable(edge_attrs={'edge_attr': None}, node_attrs='node_attr')
@@ -307,4 +347,40 @@ def attr_sparse_matrix(G, edge_attr=None, node_attr=None, normalized=False,
         (blue, blue) is 0   # there are no edges with blue endpoints
 
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+
+    edge_value = _edge_value(G, edge_attr)
+    node_value = _node_value(G, node_attr)
+
+    if rc_order is None:
+        ordering = list(set(node_value(n) for n in G))
+        ordering.sort()
+    else:
+        ordering = rc_order
+
+    N = len(ordering)
+    index = dict(zip(ordering, range(N)))
+
+    row, col, data = [], [], []
+    for u, v in G.edges():
+        i, j = index[node_value(u)], index[node_value(v)]
+        row.append(i)
+        col.append(j)
+        data.append(edge_value(u, v))
+        if not G.is_directed():
+            row.append(j)
+            col.append(i)
+            data.append(edge_value(u, v))
+
+    M = sparse.csr_matrix((data, (row, col)), shape=(N, N), dtype=dtype)
+
+    if normalized:
+        row_sum = np.array(M.sum(axis=1)).flatten()
+        row_sum[row_sum == 0] = 1  # avoid division by zero
+        M = M.multiply(1.0 / row_sum[:, np.newaxis])
+
+    if rc_order is None:
+        return M, ordering
+    else:
+        return M
