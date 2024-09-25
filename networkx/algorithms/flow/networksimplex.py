@@ -52,13 +52,25 @@ class _DataEssentialsAndFunctions:
         """
         Find the lowest common ancestor of nodes p and q in the spanning tree.
         """
-        pass
+        while p != q:
+            if self.subtree_size[p] < self.subtree_size[q]:
+                p = self.parent[p]
+            else:
+                q = self.parent[q]
+        return p
 
     def trace_path(self, p, w):
         """
         Returns the nodes and edges on the path from node p to its ancestor w.
         """
-        pass
+        Wn = [p]
+        We = []
+        while p != w:
+            e = self.parent_edge[p]
+            We.append(e)
+            p = self.parent[p]
+            Wn.append(p)
+        return Wn, We
 
     def find_cycle(self, i, p, q):
         """
@@ -67,62 +79,117 @@ class _DataEssentialsAndFunctions:
 
         The cycle is oriented in the direction from p to q.
         """
-        pass
+        w = self.find_apex(p, q)
+        Wn, We = self.trace_path(p, w)
+        Wn.reverse()
+        We.reverse()
+        Wn2, We2 = self.trace_path(q, w)
+        Wn += Wn2[1:]
+        We.append(i)
+        We += We2
+        return Wn, We
 
     def augment_flow(self, Wn, We, f):
         """
         Augment f units of flow along a cycle represented by Wn and We.
         """
-        pass
+        for i, (p, q) in enumerate(zip(Wn, Wn[1:])):
+            if p == self.parent[q]:
+                self.edge_flow[We[i]] += f
+            else:
+                self.edge_flow[We[i]] -= f
 
     def trace_subtree(self, p):
         """
         Yield the nodes in the subtree rooted at a node p.
         """
-        pass
+        yield p
+        for q in self.node_list:
+            if self.parent[q] == p:
+                yield from self.trace_subtree(q)
 
     def remove_edge(self, s, t):
         """
         Remove an edge (s, t) where parent[t] == s from the spanning tree.
         """
-        pass
+        size_t = self.subtree_size[t]
+        for q in self.trace_subtree(t):
+            self.subtree_size[self.parent[q]] -= size_t
+            if q != t:
+                self.last_descendent_dft[self.parent[q]] = self.last_descendent_dft[q]
+        self.parent[t] = None
+        self.parent_edge[t] = None
 
     def make_root(self, q):
         """
         Make a node q the root of its containing subtree.
         """
-        pass
+        p = q
+        while self.parent[p] is not None:
+            r = self.parent[p]
+            size_p = self.subtree_size[p]
+            self.subtree_size[r] -= size_p
+            self.subtree_size[p] += self.subtree_size[r]
+            i = self.parent_edge[p]
+            self.parent_edge[p] = self.parent_edge[r]
+            self.parent_edge[r] = i
+            self.parent[p] = self.parent[r]
+            self.parent[r] = p
+            p = r
 
     def add_edge(self, i, p, q):
         """
         Add an edge (p, q) to the spanning tree where q is the root of a subtree.
         """
-        pass
+        self.parent[q] = p
+        self.parent_edge[q] = i
+        self.subtree_size[p] += self.subtree_size[q]
+        self.last_descendent_dft[p] = self.last_descendent_dft[q]
 
     def update_potentials(self, i, p, q):
         """
         Update the potentials of the nodes in the subtree rooted at a node
         q connected to its parent p by an edge i.
         """
-        pass
+        if p == self.edge_sources[i]:
+            d = self.edge_weights[i] - self.node_potentials[p] + self.node_potentials[q]
+        else:
+            d = -(self.edge_weights[i] - self.node_potentials[q] + self.node_potentials[p])
+        for r in self.trace_subtree(q):
+            self.node_potentials[r] += d
 
     def reduced_cost(self, i):
         """Returns the reduced cost of an edge i."""
-        pass
+        return (self.edge_weights[i] - self.node_potentials[self.edge_sources[i]] +
+                self.node_potentials[self.edge_targets[i]])
 
     def find_entering_edges(self):
         """Yield entering edges until none can be found."""
-        pass
+        for i in range(len(self.edge_sources)):
+            c = self.reduced_cost(i)
+            if (c < 0 and self.edge_flow[i] < self.edge_capacities[i]) or (c > 0 and self.edge_flow[i] > 0):
+                yield i
 
     def residual_capacity(self, i, p):
         """Returns the residual capacity of an edge i in the direction away
         from its endpoint p.
         """
-        pass
+        if p == self.edge_sources[i]:
+            return self.edge_capacities[i] - self.edge_flow[i]
+        else:
+            return self.edge_flow[i]
 
     def find_leaving_edge(self, Wn, We):
         """Returns the leaving edge in a cycle represented by Wn and We."""
-        pass
+        j, theta = None, float('inf')
+        for i, (p, q) in enumerate(zip(Wn, Wn[1:])):
+            if p == self.parent[q]:
+                f = self.residual_capacity(We[i], p)
+            else:
+                f = self.residual_capacity(We[i], q)
+            if f < theta:
+                j, theta = i, f
+        return We[j], theta
 
 
 @not_implemented_for('undirected')
