@@ -72,7 +72,36 @@ def biadjacency_matrix(G, row_order, column_order=None, dtype=None, weight=
     .. [2] Scipy Dev. References, "Sparse Matrices",
        https://docs.scipy.org/doc/scipy/reference/sparse.html
     """
-    pass
+    import scipy.sparse as sp
+    import numpy as np
+
+    if column_order is None:
+        column_order = list(set(G) - set(row_order))
+    
+    nrows = len(row_order)
+    ncols = len(column_order)
+
+    row_index = {r: i for i, r in enumerate(row_order)}
+    col_index = {c: j for j, c in enumerate(column_order)}
+
+    data = []
+    row = []
+    col = []
+
+    for u, v, d in G.edges(data=True):
+        if u in row_index and v in col_index:
+            row.append(row_index[u])
+            col.append(col_index[v])
+            data.append(d.get(weight, 1))
+        elif v in row_index and u in col_index:
+            row.append(row_index[v])
+            col.append(col_index[u])
+            data.append(d.get(weight, 1))
+
+    data = np.array(data, dtype=dtype)
+    matrix = sp.coo_matrix((data, (row, col)), shape=(nrows, ncols))
+
+    return matrix.asformat(format)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -112,4 +141,26 @@ def from_biadjacency_matrix(A, create_using=None, edge_attribute='weight'):
     ----------
     [1] https://en.wikipedia.org/wiki/Adjacency_matrix#Adjacency_matrix_of_a_bipartite_graph
     """
-    pass
+    import scipy.sparse as sp
+    import numpy as np
+
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+
+    n, m = A.shape
+    G.add_nodes_from(range(n), bipartite=0)
+    G.add_nodes_from(range(n, n+m), bipartite=1)
+
+    if G.is_multigraph() and isinstance(A.data, np.integer):
+        # For multigraphs with integer data, create parallel edges
+        for i, j in zip(*A.nonzero()):
+            for _ in range(int(A[i, j])):
+                G.add_edge(i, j + n)
+    else:
+        # For other cases, add edges with weight attribute
+        for i, j, v in zip(*sp.find(A)):
+            G.add_edge(i, j + n, **{edge_attribute: v})
+
+    return G
