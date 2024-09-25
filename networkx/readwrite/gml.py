@@ -47,12 +47,26 @@ def escape(text):
     Use XML character references for unprintable or non-ASCII
     characters, double quotes and ampersands in a string
     """
-    pass
+    def replace(match):
+        return chr(htmlentitydefs.name2codepoint[match.group(1)])
+    
+    text = re.sub('&(%s);' % '|'.join(htmlentitydefs.name2codepoint), replace, text)
+    text = re.sub('[^ -~]', lambda m: '&#%d;' % ord(m.group(0)), text)
+    text = text.replace('&', '&amp;')
+    text = text.replace('"', '&quot;')
+    return text
 
 
 def unescape(text):
     """Replace XML character references with the referenced characters"""
-    pass
+    def replace(match):
+        if match.group(1):
+            return chr(int(match.group(1)))
+        else:
+            return chr(htmlentitydefs.name2codepoint[match.group(2)])
+    
+    text = re.sub('&#(\d+);|&(%s);' % '|'.join(htmlentitydefs.name2codepoint), replace, text)
+    return text.replace('&amp;', '&').replace('&quot;', '"')
 
 
 def literal_destringizer(rep):
@@ -73,7 +87,10 @@ def literal_destringizer(rep):
     ValueError
         If `rep` is not a Python literal.
     """
-    pass
+    try:
+        return literal_eval(rep)
+    except (ValueError, SyntaxError):
+        raise ValueError(f"Failed to convert {rep} to a Python literal.")
 
 
 @open_file(0, mode='rb')
@@ -143,7 +160,8 @@ def read_gml(path, label='label', destringizer=None):
     NodeView((0, 1, 2, 3))
 
     """
-    pass
+    lines = path.read().decode()
+    return parse_gml(lines, label, destringizer)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -195,7 +213,7 @@ def parse_gml(lines, label='label', destringizer=None):
 
     See the module docstring :mod:`networkx.readwrite.gml` for more details.
     """
-    pass
+    return parse_gml_lines(lines, label, destringizer)
 
 
 class Pattern(Enum):
@@ -221,7 +239,60 @@ LIST_START_VALUE = '_networkx_list_start'
 
 def parse_gml_lines(lines, label, destringizer):
     """Parse GML `lines` into a graph."""
-    pass
+    def tokenize():
+        patterns = [
+            ('KEYS', r'[a-zA-Z][a-zA-Z0-9_]*\s*'),
+            ('REALS', r'[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?(?!\d)\s*'),
+            ('INTS', r'[+-]?\d+\s*'),
+            ('STRINGS', r'".*?"'),
+            ('DICT_START', r'\[\s*'),
+            ('DICT_END', r'\]\s*'),
+            ('COMMENT_WHITESPACE', r'#.*$|\s+')
+        ]
+        tokens_join = '|'.join(f'(?P<{name}>{pattern})' for name, pattern in patterns)
+        tok_regex = re.compile(tokens_join)
+        for mo in tok_regex.finditer(lines):
+            kind = mo.lastgroup
+            value = mo.group()
+            if kind == 'COMMENT_WHITESPACE':
+                continue
+            yield Token(Pattern[kind], value.strip(), mo.start(), mo.end())
+
+    tokens = list(tokenize())
+    G = nx.Graph()
+    curr_dict = G.graph
+    dict_stack = []
+    current_key = None
+
+    for token in tokens:
+        if token.category == Pattern.KEYS:
+            current_key = token.value
+        elif token.category in (Pattern.REALS, Pattern.INTS, Pattern.STRINGS):
+            if destringizer:
+                try:
+                    value = destringizer(token.value)
+                except ValueError:
+                    value = token.value
+            else:
+                value = token.value
+            curr_dict[current_key] = value
+        elif token.category == Pattern.DICT_START:
+            new_dict = {}
+            curr_dict[current_key] = new_dict
+            dict_stack.append(curr_dict)
+            curr_dict = new_dict
+        elif token.category == Pattern.DICT_END:
+            if dict_stack:
+                curr_dict = dict_stack.pop()
+
+    if 'directed' in G.graph and G.graph['directed'] == 1:
+        G = nx.DiGraph(G)
+
+    for node in G.nodes():
+        if label in G.nodes[node]:
+            G.nodes[node]['label'] = G.nodes[node][label]
+
+    return G
 
 
 def literal_stringizer(value):
@@ -248,7 +319,22 @@ def literal_stringizer(value):
     The original value can be recovered using the
     :func:`networkx.readwrite.gml.literal_destringizer` function.
     """
-    pass
+    def stringize(value):
+        if isinstance(value, (int, float)):
+            return str(value)
+        elif isinstance(value, str):
+            return f'"{escape(value)}"'
+        elif isinstance(value, dict):
+            return f"[{' '.join(f'{k} {stringize(v)}' for k, v in value.items())}]"
+        elif isinstance(value, list):
+            return f"[{' '.join(stringize(item) for item in value)}]"
+        else:
+            raise ValueError(f"Cannot convert {value} to GML")
+
+    try:
+        return stringize(value)
+    except ValueError as e:
+        raise ValueError(f"Cannot convert {value} to GML: {str(e)}")
 
 
 def generate_gml(G, stringizer=None):
@@ -334,7 +420,53 @@ def generate_gml(G, stringizer=None):
       ]
     ]
     """
-    pass
+    def generate():
+        yield "graph ["
+        if G.is_directed():
+            yield "  directed 1"
+        if G.is_multigraph():
+            yield "  multigraph 1"
+
+        # Add graph attributes
+        for attr, value in G.graph.items():
+            if attr not in ['directed', 'multigraph', 'node', 'edge']:
+                yield f"  {attr} {stringize(value)}"
+
+        # Add nodes
+        for node, data in G.nodes(data=True):
+            yield "  node ["
+            yield f"    id {G.nodes.index(node)}"
+            yield f"    label {stringize(node)}"
+            for attr, value in data.items():
+                if attr not in ['id', 'label']:
+                    yield f"    {attr} {stringize(value)}"
+            yield "  ]"
+
+        # Add edges
+        for u, v, data in G.edges(data=True):
+            yield "  edge ["
+            yield f"    source {G.nodes.index(u)}"
+            yield f"    target {G.nodes.index(v)}"
+            if G.is_multigraph():
+                yield f"    key {data.get('key', 0)}"
+            for attr, value in data.items():
+                if attr not in ['source', 'target', 'key']:
+                    yield f"    {attr} {stringize(value)}"
+            yield "  ]"
+
+        yield "]"
+
+    def stringize(value):
+        if isinstance(value, (int, float)):
+            return str(value)
+        elif isinstance(value, str):
+            return f'"{escape(value)}"'
+        elif stringizer is not None:
+            return stringizer(value)
+        else:
+            raise ValueError(f"Cannot convert {value} to GML")
+
+    return generate()
 
 
 @open_file(1, mode='wb')
@@ -398,4 +530,6 @@ def write_gml(G, path, stringizer=None):
 
     >>> nx.write_gml(G, "test.gml.gz")
     """
-    pass
+    for line in generate_gml(G, stringizer):
+        line += '\n'
+        path.write(line.encode('ascii'))
