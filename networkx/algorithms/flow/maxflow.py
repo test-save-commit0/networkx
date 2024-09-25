@@ -141,7 +141,14 @@ def maximum_flow(flowG, _s, _t, capacity='capacity', flow_func=None, **kwargs):
     True
 
     """
-    pass
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    R = flow_func(flowG, _s, _t, capacity=capacity, value_only=False, **kwargs)
+    flow_value = R.graph['flow_value']
+    flow_dict = build_flow_dict(flowG, R)
+
+    return flow_value, flow_dict
 
 
 @nx._dispatchable(graphs='flowG', edge_attrs={'capacity': float('inf')})
@@ -403,7 +410,18 @@ def minimum_cut(flowG, _s, _t, capacity='capacity', flow_func=None, **kwargs):
     True
 
     """
-    pass
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    R = flow_func(flowG, _s, _t, capacity=capacity, value_only=False, **kwargs)
+    cut_value = R.graph['flow_value']
+
+    # Extract the partition of nodes reachable from s in the residual network.
+    reachable = set(nx.dfs_preorder_nodes(R, _s))
+    non_reachable = set(R) - reachable
+
+    partition = (reachable, non_reachable)
+    return cut_value, partition
 
 
 @nx._dispatchable(graphs='flowG', edge_attrs={'capacity': float('inf')})
@@ -526,4 +544,8 @@ def minimum_cut_value(flowG, _s, _t, capacity='capacity', flow_func=None,
     True
 
     """
-    pass
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    R = flow_func(flowG, _s, _t, capacity=capacity, value_only=True, **kwargs)
+    return R.graph['flow_value']
