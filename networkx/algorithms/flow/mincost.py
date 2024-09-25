@@ -95,7 +95,40 @@ def min_cost_flow_cost(G, demand='demand', capacity='capacity', weight='weight'
     >>> flowCost
     24
     """
-    pass
+    if not G.is_directed():
+        raise nx.NetworkXError("Graph must be directed")
+    
+    if not nx.is_weakly_connected(G):
+        raise nx.NetworkXError("Graph must be connected")
+
+    # Check if the sum of demands is zero
+    total_demand = sum(G.nodes[n].get(demand, 0) for n in G)
+    if abs(total_demand) > 1e-10:  # Use a small threshold for floating-point comparison
+        raise nx.NetworkXUnfeasible("Sum of the demands must be 0")
+
+    # Create a new graph with supply and demand nodes
+    H = nx.DiGraph()
+    for u, v, data in G.edges(data=True):
+        H.add_edge(u, v, capacity=data.get(capacity, float('inf')), weight=data.get(weight, 0))
+
+    # Add supply and demand
+    for n in G:
+        node_demand = G.nodes[n].get(demand, 0)
+        if node_demand < 0:
+            H.add_edge('source', n, capacity=-node_demand, weight=0)
+        elif node_demand > 0:
+            H.add_edge(n, 'sink', capacity=node_demand, weight=0)
+
+    # Solve the min cost flow problem
+    try:
+        flow_dict = nx.min_cost_flow(H)
+    except nx.NetworkXUnfeasible:
+        raise nx.NetworkXUnfeasible("No flow satisfying all demands")
+    except nx.NetworkXUnbounded:
+        raise nx.NetworkXUnbounded("Negative cost cycle detected")
+
+    # Calculate the cost of the flow
+    return sum(flow * data[weight] for u in flow_dict for v, flow in flow_dict[u].items() if u != 'source' and v != 'sink' for data in [G[u][v]])
 
 
 @nx._dispatchable(node_attrs='demand', edge_attrs={'capacity': float('inf'),
@@ -187,7 +220,41 @@ def min_cost_flow(G, demand='demand', capacity='capacity', weight='weight'):
     >>> flowDict
     {'a': {'b': 4, 'c': 1}, 'd': {}, 'b': {'d': 4}, 'c': {'d': 1}}
     """
-    pass
+    if not G.is_directed():
+        raise nx.NetworkXError("Graph must be directed")
+    
+    if not nx.is_weakly_connected(G):
+        raise nx.NetworkXError("Graph must be connected")
+
+    # Check if the sum of demands is zero
+    total_demand = sum(G.nodes[n].get(demand, 0) for n in G)
+    if abs(total_demand) > 1e-10:  # Use a small threshold for floating-point comparison
+        raise nx.NetworkXUnfeasible("Sum of the demands must be 0")
+
+    # Create a new graph with supply and demand nodes
+    H = nx.DiGraph()
+    for u, v, data in G.edges(data=True):
+        H.add_edge(u, v, capacity=data.get(capacity, float('inf')), weight=data.get(weight, 0))
+
+    # Add supply and demand
+    for n in G:
+        node_demand = G.nodes[n].get(demand, 0)
+        if node_demand < 0:
+            H.add_edge('source', n, capacity=-node_demand, weight=0)
+        elif node_demand > 0:
+            H.add_edge(n, 'sink', capacity=node_demand, weight=0)
+
+    # Solve the min cost flow problem
+    try:
+        flow_dict = nx.network_simplex(H)
+    except nx.NetworkXUnfeasible:
+        raise nx.NetworkXUnfeasible("No flow satisfying all demands")
+    except nx.NetworkXUnbounded:
+        raise nx.NetworkXUnbounded("Negative cost cycle detected")
+
+    # Remove source and sink nodes from the flow dictionary
+    return {u: {v: flow for v, flow in flow_dict[u].items() if v != 'sink'} 
+            for u in flow_dict if u != 'source' and flow_dict[u]}
 
 
 @nx._dispatchable(edge_attrs={'weight': 0})
@@ -247,7 +314,9 @@ def cost_of_flow(G, flowDict, weight='weight'):
     >>> nx.cost_of_flow(G, flowDict)
     24
     """
-    pass
+    return sum(flow * G[u][v].get(weight, 0)
+               for u in flowDict
+               for v, flow in flowDict[u].items())
 
 
 @nx._dispatchable(edge_attrs={'capacity': float('inf'), 'weight': 0})
@@ -347,4 +416,29 @@ def max_flow_min_cost(G, s, t, capacity='capacity', weight='weight'):
     True
 
     """
-    pass
+    if not G.is_directed():
+        raise nx.NetworkXError("Graph must be directed")
+    
+    if not nx.is_weakly_connected(G):
+        raise nx.NetworkXError("Graph must be connected")
+
+    # Find the maximum flow value
+    max_flow_value = nx.maximum_flow_value(G, s, t, capacity=capacity)
+
+    # Create a new graph with supply and demand nodes
+    H = G.copy()
+    H.add_edge(t, s, capacity=max_flow_value, weight=-sum(abs(d.get(weight, 0)) for u, v, d in G.edges(data=True)))
+
+    # Solve the min cost circulation problem
+    try:
+        flow_dict = nx.min_cost_flow(H)
+    except nx.NetworkXUnfeasible:
+        raise nx.NetworkXUnbounded("Negative cost cycle detected")
+
+    # Remove the (t, s) edge and return the flow
+    if t in flow_dict and s in flow_dict[t]:
+        del flow_dict[t][s]
+    if s in flow_dict and t in flow_dict[s]:
+        del flow_dict[s][t]
+
+    return {u: {v: flow for v, flow in flow_dict[u].items() if flow > 0} for u in flow_dict if flow_dict[u]}
