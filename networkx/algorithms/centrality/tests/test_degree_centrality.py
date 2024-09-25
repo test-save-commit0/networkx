@@ -142,3 +142,29 @@ class TestDegreeCentrality:
         assert {0: 1} == nx.degree_centrality(G)
         assert {0: 1} == nx.out_degree_centrality(G)
         assert {0: 1} == nx.in_degree_centrality(G)
+
+    def test_empty_graph(self):
+        G = nx.Graph()
+        assert nx.degree_centrality(G) == {}
+        
+    def test_single_node_graph(self):
+        G = nx.Graph()
+        G.add_node(0)
+        assert nx.degree_centrality(G) == {0: 0.0}
+        
+    def test_single_edge_digraph(self):
+        G = nx.DiGraph()
+        G.add_edge(0, 1)
+        assert nx.in_degree_centrality(G) == {0: 0.0, 1: 1.0}
+        assert nx.out_degree_centrality(G) == {0: 1.0, 1: 0.0}
+
+    def test_multigraph(self):
+        G = nx.MultiGraph()
+        G.add_edges_from([(0, 1), (0, 1), (0, 2)])
+        assert nx.degree_centrality(G) == {0: 1.0, 1: 0.5, 2: 0.5}
+
+    def test_selfloop(self):
+        G = nx.Graph()
+        G.add_edge(0, 0)
+        G.add_edge(0, 1)
+        assert nx.degree_centrality(G) == {0: 1.0, 1: 0.5}
