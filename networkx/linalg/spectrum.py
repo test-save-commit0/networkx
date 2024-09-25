@@ -2,6 +2,11 @@
 Eigenvalue spectrum of graphs.
 """
 import networkx as nx
+import numpy as np
+from networkx.linalg.laplacianmatrix import laplacian_matrix
+from networkx.linalg.modularity import modularity_matrix
+from networkx.linalg.bethehessianmatrix import bethe_hessian_matrix
+
 __all__ = ['laplacian_spectrum', 'adjacency_spectrum',
     'modularity_spectrum', 'normalized_laplacian_spectrum',
     'bethe_hessian_spectrum']
@@ -46,7 +51,8 @@ def laplacian_spectrum(G, weight='weight'):
     array([0., 0., 0., 2., 2.])
 
     """
-    pass
+    L = laplacian_matrix(G, weight=weight)
+    return np.linalg.eigvals(L.toarray())
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -76,7 +82,9 @@ def normalized_laplacian_spectrum(G, weight='weight'):
     --------
     normalized_laplacian_matrix
     """
-    pass
+    from networkx.linalg.laplacianmatrix import normalized_laplacian_matrix
+    NL = normalized_laplacian_matrix(G, weight=weight)
+    return np.linalg.eigvals(NL.toarray())
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -106,7 +114,8 @@ def adjacency_spectrum(G, weight='weight'):
     --------
     adjacency_matrix
     """
-    pass
+    A = nx.adjacency_matrix(G, weight=weight)
+    return np.linalg.eigvals(A.toarray())
 
 
 @nx._dispatchable
@@ -132,7 +141,8 @@ def modularity_spectrum(G):
     .. [1] M. E. J. Newman, "Modularity and community structure in networks",
        Proc. Natl. Acad. Sci. USA, vol. 103, pp. 8577-8582, 2006.
     """
-    pass
+    M = modularity_matrix(G)
+    return np.linalg.eigvals(M.toarray())
 
 
 @nx._dispatchable
@@ -162,4 +172,5 @@ def bethe_hessian_spectrum(G, r=None):
        "Spectral clustering of graphs with the bethe hessian",
        Advances in Neural Information Processing Systems. 2014.
     """
-    pass
+    BH = bethe_hessian_matrix(G, r)
+    return np.linalg.eigvals(BH.toarray())
