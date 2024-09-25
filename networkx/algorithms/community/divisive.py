@@ -61,7 +61,21 @@ def edge_betweenness_partition(G, number_of_sets, *, weight=None):
        Volume 486, Issue 3-5 p. 75-174
        http://arxiv.org/abs/0906.0612
     """
-    pass
+    if number_of_sets <= 0 or number_of_sets > len(G):
+        raise nx.NetworkXError("number_of_sets must be between 1 and the number of nodes in G")
+
+    H = G.copy()
+    components = list(nx.connected_components(H))
+
+    while len(components) < number_of_sets:
+        edge_betweenness = nx.edge_betweenness_centrality(H, weight=weight)
+        if not edge_betweenness:
+            break
+        max_betweenness_edge = max(edge_betweenness, key=edge_betweenness.get)
+        H.remove_edge(*max_betweenness_edge)
+        components = list(nx.connected_components(H))
+
+    return components
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -121,4 +135,18 @@ def edge_current_flow_betweenness_partition(G, number_of_sets, *, weight=None):
        Volume 486, Issue 3-5 p. 75-174
        http://arxiv.org/abs/0906.0612
     """
-    pass
+    if number_of_sets <= 0 or number_of_sets > len(G):
+        raise nx.NetworkXError("number_of_sets must be between 1 and the number of nodes in G")
+
+    H = G.copy()
+    components = list(nx.connected_components(H))
+
+    while len(components) < number_of_sets:
+        edge_betweenness = nx.edge_current_flow_betweenness_centrality(H, weight=weight)
+        if not edge_betweenness:
+            break
+        max_betweenness_edge = max(edge_betweenness, key=edge_betweenness.get)
+        H.remove_edge(*max_betweenness_edge)
+        components = list(nx.connected_components(H))
+
+    return components
