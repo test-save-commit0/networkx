@@ -44,7 +44,16 @@ def write_p2g(G, path, encoding='utf-8'):
     This format is meant to be used with directed graphs with
     possible self loops.
     """
-    pass
+    path.write(f"{G.name}\n".encode(encoding))
+    path.write(f"{G.number_of_nodes()} {G.number_of_edges()}\n".encode(encoding))
+    
+    # Create a mapping of nodes to their indices
+    node_to_index = {node: i for i, node in enumerate(G.nodes())}
+    
+    for node in G.nodes():
+        path.write(f"{node}\n".encode(encoding))
+        out_edges = " ".join(str(node_to_index[neighbor]) for neighbor in G.successors(node))
+        path.write(f"{out_edges}\n".encode(encoding))
 
 
 @open_file(0, mode='r')
@@ -61,7 +70,7 @@ def read_p2g(path, encoding='utf-8'):
     If you want a DiGraph (with no self loops allowed and no edge data)
     use D=nx.DiGraph(read_p2g(path))
     """
-    pass
+    return parse_p2g(path)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -72,4 +81,24 @@ def parse_p2g(lines):
     -------
     MultiDiGraph
     """
-    pass
+    G = nx.MultiDiGraph()
+    lines = iter(lines)
+    
+    # Read graph name
+    G.name = next(lines).strip()
+    
+    # Read number of nodes and edges
+    num_nodes, num_edges = map(int, next(lines).strip().split())
+    
+    # Read nodes and edges
+    node_list = []
+    for _ in range(num_nodes):
+        node = next(lines).strip()
+        node_list.append(node)
+        G.add_node(node)
+        
+        out_edges = next(lines).strip().split()
+        for target in out_edges:
+            G.add_edge(node, node_list[int(target)])
+    
+    return G
