@@ -79,7 +79,15 @@ def wiener_index(G, weight=None):
     ----------
     .. [1] `Wikipedia: Wiener Index <https://en.wikipedia.org/wiki/Wiener_index>`_
     """
-    pass
+    if not nx.is_connected(G):
+        return float('inf')
+    
+    index = 0
+    for node in G:
+        lengths = nx.single_source_shortest_path_length(G, node, weight=weight)
+        index += sum(lengths.values())
+    
+    return index / (2 if G.is_directed() else 1)
 
 
 @nx.utils.not_implemented_for('directed')
@@ -142,7 +150,19 @@ def schultz_index(G, weight=None):
            J. Chem. Inf. Comput. Sci. 29 (1989), 239–257.
 
     """
-    pass
+    if not nx.is_connected(G):
+        return float('inf')
+    
+    index = 0
+    degrees = dict(G.degree())
+    
+    for u in G:
+        lengths = nx.single_source_shortest_path_length(G, u, weight=weight)
+        for v, dist in lengths.items():
+            if u < v:  # Count each pair only once
+                index += dist * (degrees[u] + degrees[v])
+    
+    return index
 
 
 @nx.utils.not_implemented_for('directed')
@@ -203,4 +223,16 @@ def gutman_index(G, weight=None):
            https://doi.org/10.1021/ci00021a009
 
     """
-    pass
+    if not nx.is_connected(G):
+        return float('inf')
+    
+    index = 0
+    degrees = dict(G.degree())
+    
+    for u in G:
+        lengths = nx.single_source_shortest_path_length(G, u, weight=weight)
+        for v, dist in lengths.items():
+            if u < v:  # Count each pair only once
+                index += dist * degrees[u] * degrees[v]
+    
+    return index
