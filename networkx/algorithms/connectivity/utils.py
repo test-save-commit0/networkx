@@ -36,7 +36,24 @@ def build_auxiliary_node_connectivity(G):
         https://doi.org/10.1007/978-3-540-31955-9_7
 
     """
-    pass
+    D = nx.DiGraph()
+    mapping = {}
+    for i, node in enumerate(G):
+        mapping[node] = i
+        D.add_node(f"{i}A")
+        D.add_node(f"{i}B")
+        D.add_edge(f"{i}A", f"{i}B", capacity=1)
+
+    if G.is_directed():
+        for u, v in G.edges():
+            D.add_edge(f"{mapping[u]}B", f"{mapping[v]}A", capacity=1)
+    else:
+        for u, v in G.edges():
+            D.add_edge(f"{mapping[u]}B", f"{mapping[v]}A", capacity=1)
+            D.add_edge(f"{mapping[v]}B", f"{mapping[u]}A", capacity=1)
+
+    D.graph['mapping'] = mapping
+    return D
 
 
 @nx._dispatchable(returns_graph=True)
@@ -54,4 +71,13 @@ def build_auxiliary_edge_connectivity(G):
         chapter, look for the reference of the book).
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
     """
-    pass
+    if G.is_directed():
+        D = G.copy()
+        for u, v in D.edges():
+            D[u][v]['capacity'] = 1
+    else:
+        D = nx.DiGraph()
+        for u, v in G.edges():
+            D.add_edge(u, v, capacity=1)
+            D.add_edge(v, u, capacity=1)
+    return D
