@@ -1086,4 +1086,54 @@ def threshold_accepting_tsp(G, init_cycle, weight='weight', source=None,
     simulated_annealing_tsp
 
     """
-    pass
+    if source is None:
+        source = next(iter(G))
+    
+    if init_cycle == "greedy":
+        best_cycle = greedy_tsp(G, weight=weight, source=source)
+    else:
+        best_cycle = list(init_cycle)
+    
+    if move == "1-1":
+        move_func = swap_two_nodes
+    elif move == "1-0":
+        move_func = move_one_node
+    else:
+        move_func = move
+    
+    rng = np.random.default_rng(seed)
+    
+    def cycle_cost(cycle):
+        return sum(G[u][v].get(weight, 1) for u, v in nx.utils.pairwise(cycle))
+    
+    best_cost = cycle_cost(best_cycle)
+    current_cycle = best_cycle.copy()
+    current_cost = best_cost
+    
+    no_improvement = 0
+    for _ in range(max_iterations):
+        accepted = False
+        for _ in range(N_inner):
+            candidate_cycle = move_func(current_cycle.copy(), rng)
+            candidate_cost = cycle_cost(candidate_cycle)
+            
+            if candidate_cost - current_cost <= threshold:
+                current_cycle = candidate_cycle
+                current_cost = candidate_cost
+                accepted = True
+                
+                if current_cost < best_cost:
+                    best_cycle = current_cycle.copy()
+                    best_cost = current_cost
+                    no_improvement = 0
+                    break
+        
+        if not accepted:
+            no_improvement += 1
+        else:
+            threshold *= (1 - alpha)
+        
+        if no_improvement >= max_iterations:
+            break
+    
+    return best_cycle
