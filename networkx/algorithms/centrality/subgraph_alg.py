@@ -78,7 +78,13 @@ def subgraph_centrality_exp(G):
     >>> print([f"{node} {sc[node]:0.2f}" for node in sorted(sc)])
     ['1 3.90', '2 3.90', '3 3.64', '4 3.71', '5 3.64', '6 3.71', '7 3.64', '8 3.90']
     """
-    pass
+    import numpy as np
+    from scipy.linalg import expm
+
+    A = nx.to_numpy_array(G)
+    exp_A = expm(A)
+    sc = {i: exp_A[i, i] for i in range(len(G))}
+    return {node: sc[i] for i, node in enumerate(G)}
 
 
 @not_implemented_for('directed')
@@ -157,7 +163,16 @@ def subgraph_centrality(G):
        https://arxiv.org/abs/cond-mat/0504730
 
     """
-    pass
+    import numpy as np
+
+    A = nx.to_numpy_array(G)
+    eigenvalues, eigenvectors = np.linalg.eigh(A)
+    
+    sc = {}
+    for i, node in enumerate(G):
+        sc[node] = sum((eigenvectors[i, j] ** 2) * np.exp(eigenvalues[j]) for j in range(len(G)))
+    
+    return sc
 
 
 @not_implemented_for('directed')
@@ -228,7 +243,33 @@ def communicability_betweenness_centrality(G):
     >>> print([f"{node} {cbc[node]:0.2f}" for node in sorted(cbc)])
     ['0 0.03', '1 0.45', '2 0.51', '3 0.45', '4 0.40', '5 0.19', '6 0.03']
     """
-    pass
+    import numpy as np
+    from scipy.linalg import expm
+
+    A = nx.to_numpy_array(G)
+    n = A.shape[0]
+    C = (n - 1) ** 2 - (n - 1)
+    exp_A = expm(A)
+
+    cbc = {}
+    for r in G:
+        E_r = np.zeros_like(A)
+        E_r[r, :] = -A[r, :]
+        E_r[:, r] = -A[:, r]
+        exp_A_E_r = expm(A + E_r)
+
+        omega_r = 0
+        for p in G:
+            for q in G:
+                if p != q and q != r:
+                    G_prq = exp_A[p, q] - exp_A_E_r[p, q]
+                    G_pq = exp_A[p, q]
+                    if G_pq != 0:
+                        omega_r += G_prq / G_pq
+
+        cbc[r] = omega_r / C
+
+    return cbc
 
 
 @nx._dispatchable
@@ -277,4 +318,8 @@ def estrada_index(G):
     >>> print(f"{ei:0.5}")
     20.55
     """
-    pass
+    import numpy as np
+
+    A = nx.to_numpy_array(G)
+    eigenvalues = np.linalg.eigvals(A)
+    return np.sum(np.exp(eigenvalues))
