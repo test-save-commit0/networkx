@@ -51,7 +51,34 @@ def mycielskian(G, iterations=1):
     Graph, node, and edge data are not necessarily propagated to the new graph.
 
     """
-    pass
+    if iterations < 0:
+        raise ValueError("Number of iterations must be non-negative")
+    
+    M = G.copy()
+    for _ in range(iterations):
+        n = M.number_of_nodes()
+        new_M = nx.Graph()
+        
+        # Add original nodes and edges
+        new_M.add_nodes_from(M.nodes())
+        new_M.add_edges_from(M.edges())
+        
+        # Add new nodes
+        new_M.add_nodes_from(range(n, 2*n))
+        new_M.add_node(2*n)  # Add w node
+        
+        # Add new edges
+        for u, v in M.edges():
+            new_M.add_edge(u, v + n)
+            new_M.add_edge(u + n, v)
+        
+        # Connect new nodes to w
+        for u in range(n, 2*n):
+            new_M.add_edge(u, 2*n)
+        
+        M = new_M
+    
+    return M
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -85,4 +112,13 @@ def mycielski_graph(n):
     The remaining graphs are generated using the Mycielski operation.
 
     """
-    pass
+    if n < 1:
+        raise ValueError("n must be a positive integer")
+    
+    if n == 1:
+        return nx.Graph([(0, 0)])
+    elif n == 2:
+        return nx.Graph([(0, 1)])
+    else:
+        G = nx.Graph([(0, 1)])
+        return mycielskian(G, n - 2)
