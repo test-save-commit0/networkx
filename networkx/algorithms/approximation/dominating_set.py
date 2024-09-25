@@ -69,7 +69,29 @@ def min_weighted_dominating_set(G, weight=None):
            Springer Science & Business Media, 2001.
 
     """
-    pass
+    dominating_set = set()
+    remaining_nodes = set(G.nodes())
+    
+    if weight is None:
+        weight_func = lambda node: 1
+    else:
+        weight_func = lambda node: G.nodes[node].get(weight, 1)
+    
+    while remaining_nodes:
+        # Find the node with the maximum ratio of covered nodes to weight
+        max_ratio_node = max(
+            remaining_nodes,
+            key=lambda node: len(set(G[node]) & remaining_nodes) / weight_func(node)
+        )
+        
+        # Add the node to the dominating set
+        dominating_set.add(max_ratio_node)
+        
+        # Remove the node and its neighbors from the remaining nodes
+        remaining_nodes -= set(G[max_ratio_node])
+        remaining_nodes.discard(max_ratio_node)
+    
+    return dominating_set
 
 
 @nx._dispatchable
@@ -103,4 +125,12 @@ def min_edge_dominating_set(G):
     problem. The result is no more than 2 * OPT in terms of size of the set.
     Runtime of the algorithm is $O(|E|)$.
     """
-    pass
+    if G.number_of_edges() == 0:
+        raise ValueError("Graph G is empty.")
+    
+    # Compute a maximal matching
+    matching = maximal_matching(G)
+    
+    # The maximal matching is already an edge dominating set
+    # and its size is no more than 2 * OPT
+    return set(matching)
