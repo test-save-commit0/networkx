@@ -194,7 +194,57 @@ def generate_network_text(graph, with_labels=True, sources=None, max_depth=
             ├── E
             └── F
     """
-    pass
+    if sources is None:
+        sources = _find_sources(graph)
+
+    glyphs = (AsciiDirectedGlyphs() if ascii_only else UtfDirectedGlyphs()) if graph.is_directed() else (AsciiUndirectedGlyphs() if ascii_only else UtfUndirectedGlyphs())
+
+    def _generate_lines(node, prefix='', depth=0, parent=None, seen=None):
+        if seen is None:
+            seen = set()
+
+        if node in seen:
+            yield f'{prefix}{glyphs.mid} ...'
+            return
+
+        seen.add(node)
+
+        if max_depth is not None and depth > max_depth:
+            yield f'{prefix}{glyphs.mid} ...'
+            return
+
+        label = node
+        if with_labels:
+            label = graph.nodes[node].get('label', node) if isinstance(with_labels, bool) else graph.nodes[node].get(with_labels, node)
+
+        backedges = []
+        if graph.is_directed():
+            backedges = [pred for pred in graph.predecessors(node) if pred != parent and pred in seen]
+        else:
+            backedges = [neigh for neigh in graph.neighbors(node) if neigh != parent and neigh in seen]
+
+        if backedges:
+            backedge_str = f' {glyphs.backedge} {", ".join(map(str, backedges))}'
+        else:
+            backedge_str = ''
+
+        yield f'{prefix}{glyphs.mid} {label}{backedge_str}'
+
+        children = [child for child in graph.neighbors(node) if child != parent and child not in seen]
+
+        for i, child in enumerate(children):
+            is_last = (i == len(children) - 1)
+            new_prefix = prefix + (glyphs.endof_forest if is_last else glyphs.within_forest)
+
+            if vertical_chains and len(children) == 1:
+                yield f'{new_prefix}{glyphs.vertical_edge}'
+                yield from _generate_lines(child, new_prefix, depth + 1, node, seen)
+            else:
+                yield from _generate_lines(child, new_prefix, depth + 1, node, seen)
+
+    for source in sources:
+        yield f'{glyphs.empty}{glyphs.newtree_last} {source}'
+        yield from _generate_lines(source)
 
 
 @open_file(1, 'w')
@@ -361,7 +411,11 @@ def _find_sources(graph):
     """
     Determine a minimal set of nodes such that the entire graph is reachable
     """
-    pass
+    if graph.is_directed():
+        sccs = list(nx.strongly_connected_components(graph))
+        return [min(scc, key=lambda n: graph.in_degree(n)) for scc in sccs]
+    else:
+        return [min(cc, key=graph.degree) for cc in nx.connected_components(graph)]
 
 
 def forest_str(graph, with_labels=True, sources=None, write=None,
@@ -433,7 +487,13 @@ def forest_str(graph, with_labels=True, sources=None, write=None,
         L-- 1
             L-- 2
     """
-    pass
+    lines = list(generate_network_text(graph, with_labels=with_labels, sources=sources, ascii_only=ascii_only))
+    
+    if write is None:
+        return '\n'.join(lines)
+    else:
+        for line in lines:
+            write(line + '\n')
 
 
 def _parse_network_text(lines):
@@ -455,4 +515,43 @@ def _parse_network_text(lines):
     G: NetworkX graph
         The graph corresponding to the lines in network text format.
     """
-    pass
+    G = nx.DiGraph()
+    stack = []
+    current_depth = -1
+
+    for line in lines:
+        depth = (len(line) - len(line.lstrip())) // 4
+        content = line.strip()
+
+        if not content:
+            continue
+
+        if depth <= current_depth:
+            for _ in range(current_depth - depth + 1):
+                stack.pop()
+
+        current_depth = depth
+
+        if '─' in content or '--' in content:
+            node = content.split('─')[-1].split('--')[-1].strip()
+            if stack:
+                G.add_edge(stack[-1], node)
+            stack.append(node)
+        elif '╾' in content or '<-' in content:
+            node, backedges = content.split('╾' if '╾' in content else '<-')
+            node = node.strip()
+            backedges = [edge.strip() for edge in backedges.split(',')]
+            if stack:
+                G.add_edge(stack[-1], node)
+            for backedge in backedges:
+                G.add_edge(backedge, node)
+            stack.append(node)
+        elif '...' in content:
+            continue
+        else:
+            node = content
+            if stack:
+                G.add_edge(stack[-1], node)
+            stack.append(node)
+
+    return G
