@@ -8,17 +8,41 @@ __all__ = ['edmonds_karp']
 
 def edmonds_karp_core(R, s, t, cutoff):
     """Implementation of the Edmonds-Karp algorithm."""
-    pass
+    flow_value = 0
+    while flow_value < cutoff:
+        path = nx.shortest_path(R, s, t)
+        if not path:
+            break
+        flow = min(R[u][v]['capacity'] - R[u][v].get('flow', 0) for u, v in zip(path[:-1], path[1:]))
+        flow = min(flow, cutoff - flow_value)
+        flow_value += flow
+        for u, v in zip(path[:-1], path[1:]):
+            R[u][v]['flow'] = R[u][v].get('flow', 0) + flow
+            R[v][u]['flow'] = R[v][u].get('flow', 0) - flow
+    return flow_value
 
 
 def edmonds_karp_impl(G, s, t, capacity, residual, cutoff):
     """Implementation of the Edmonds-Karp algorithm."""
-    pass
+    if residual is None:
+        R = build_residual_network(G, capacity)
+    else:
+        R = residual
+
+    # Initialize/reset the residual network
+    for u in R:
+        for e in R[u].values():
+            e['flow'] = 0
+
+    if cutoff is None:
+        cutoff = float('inf')
+
+    R.graph['flow_value'] = edmonds_karp_core(R, s, t, cutoff)
+    return R
 
 
 @nx._dispatchable(edge_attrs={'capacity': float('inf')}, returns_graph=True)
-def edmonds_karp(G, s, t, capacity='capacity', residual=None, value_only=
-    False, cutoff=None):
+def edmonds_karp(G, s, t, capacity='capacity', residual=None, value_only=False, cutoff=None):
     """Find a maximum single-commodity flow using the Edmonds-Karp algorithm.
 
     This function returns the residual network resulting after computing
