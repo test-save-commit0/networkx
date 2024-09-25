@@ -42,7 +42,10 @@ def attracting_components(G):
     is_attracting_component
 
     """
-    pass
+    scc = nx.strongly_connected_components(G)
+    for component in scc:
+        if all(G.out_degree(node) == 0 or G.out_degree(node) == sum(1 for _ in G.neighbors(node) if _ in component) for node in component):
+            yield component
 
 
 @not_implemented_for('undirected')
@@ -71,7 +74,7 @@ def number_attracting_components(G):
     is_attracting_component
 
     """
-    pass
+    return sum(1 for _ in attracting_components(G))
 
 
 @not_implemented_for('undirected')
@@ -100,4 +103,4 @@ def is_attracting_component(G):
     number_attracting_components
 
     """
-    pass
+    return number_attracting_components(G) == 1 and len(G) == len(next(attracting_components(G)))
