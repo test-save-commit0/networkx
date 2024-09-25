@@ -41,4 +41,17 @@ def ego_graph(G, n, radius=1, center=True, undirected=False, distance=None):
 
     Node, edge, and graph attributes are copied to the returned subgraph.
     """
-    pass
+    if undirected and G.is_directed():
+        G = G.to_undirected()
+
+    # Create a breadth-first search tree
+    bfs_tree = nx.bfs_tree(G, n, depth_limit=radius, reverse=False)
+
+    # Create the ego graph
+    ego = G.subgraph(bfs_tree.nodes()).copy()
+
+    # Remove the center node if not required
+    if not center:
+        ego.remove_node(n)
+
+    return ego
