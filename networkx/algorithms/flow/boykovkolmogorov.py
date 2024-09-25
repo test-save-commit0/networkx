@@ -151,4 +151,123 @@ def boykov_kolmogorov(G, s, t, capacity='capacity', residual=None,
            https://web.archive.org/web/20170809091249/https://pub.ist.ac.at/~vnk/papers/thesis.pdf
 
     """
-    pass
+    if not isinstance(G, nx.Graph):
+        raise nx.NetworkXError("Boykov-Kolmogorov algorithm not applicable for MultiGraph or MultiDiGraph ")
+
+    if s not in G:
+        raise nx.NetworkXError(f"Source {s} not in graph")
+    if t not in G:
+        raise nx.NetworkXError(f"Sink {t} not in graph")
+
+    if residual is None:
+        R = build_residual_network(G, capacity)
+    else:
+        R = residual
+
+    # Initialize the residual network
+    for u in R:
+        for e in R[u].values():
+            e['flow'] = 0
+
+    inf = R.graph['inf']
+
+    def grow():
+        """Bidirectional breadth-first search for the growth stage."""
+        while active:
+            v = active.popleft()
+            if v in source_tree:
+                for w, attr in R[v].items():
+                    if w not in source_tree and attr['capacity'] > attr['flow']:
+                        source_tree[w] = v
+                        active.append(w)
+                        if w in target_tree:
+                            return w  # Found an augmenting path
+            else:  # v in target_tree
+                for w in R.predecessors(v):
+                    attr = R[w][v]
+                    if w not in target_tree and attr['flow'] > 0:
+                        target_tree[w] = v
+                        active.append(w)
+                        if w in source_tree:
+                            return w  # Found an augmenting path
+        return None
+
+    def augment(v):
+        """Augment flow along the path found by grow()."""
+        path = [v]
+        u = v
+        while u != s:
+            u = source_tree[u]
+            path.append(u)
+        u = v
+        while u != t:
+            u = target_tree[u]
+            path.append(u)
+        path.reverse()
+        flow = inf
+        for u, v in zip(path[:-1], path[1:]):
+            if v in R[u]:
+                flow = min(flow, R[u][v]['capacity'] - R[u][v]['flow'])
+            else:
+                flow = min(flow, R[v][u]['flow'])
+        for u, v in zip(path[:-1], path[1:]):
+            if v in R[u]:
+                R[u][v]['flow'] += flow
+                R[v][u]['flow'] -= flow
+            else:
+                R[v][u]['flow'] -= flow
+                R[u][v]['flow'] += flow
+        return flow
+
+    def adopt():
+        """Adopt orphans to maintain valid search trees."""
+        while orphans:
+            v = orphans.popleft()
+            if v in source_tree:
+                found = False
+                for u in R.predecessors(v):
+                    if u in source_tree and R[u][v]['capacity'] > R[u][v]['flow']:
+                        source_tree[v] = u
+                        found = True
+                        break
+                if not found:
+                    for w in R[v]:
+                        if w in source_tree:
+                            if w != s:
+                                orphans.append(w)
+                            del source_tree[w]
+                    del source_tree[v]
+            else:  # v in target_tree
+                found = False
+                for u in R[v]:
+                    if u in target_tree and R[v][u]['flow'] > 0:
+                        target_tree[v] = u
+                        found = True
+                        break
+                if not found:
+                    for w, attr in R[v].items():
+                        if w in target_tree:
+                            if w != t:
+                                orphans.append(w)
+                            del target_tree[w]
+                    del target_tree[v]
+
+    # Initialize search trees and active set
+    source_tree = {s: None}
+    target_tree = {t: None}
+    active = deque([s, t])
+    orphans = deque()
+
+    flow_value = 0
+    while True:
+        v = grow()
+        if v is None:
+            break
+        flow_value += augment(v)
+        adopt()
+        if cutoff is not None and flow_value >= cutoff:
+            break
+
+    R.graph['flow_value'] = flow_value
+    R.graph['trees'] = (source_tree, target_tree)
+    return R
