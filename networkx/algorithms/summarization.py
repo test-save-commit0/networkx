@@ -168,7 +168,41 @@ def dedensify(G, threshold, prefix=None, copy=True):
        Knowledge Discovery and Data Mining (pp. 1755-1764).
        http://www.cs.umd.edu/~abadi/papers/graph-dedense.pdf
     """
-    pass
+    if threshold < 2:
+        raise ValueError("Threshold must be greater than or equal to 2")
+
+    if copy:
+        G = G.copy()
+
+    compressor_nodes = set()
+    compressor_id = 0
+
+    for node in list(G.nodes()):
+        if G.degree(node) > threshold:
+            neighbors = list(G.neighbors(node))
+            neighbor_groups = {}
+
+            for neighbor in neighbors:
+                edge_data = G.get_edge_data(node, neighbor)
+                edge_type = tuple(sorted(edge_data.items())) if edge_data else ()
+                if edge_type not in neighbor_groups:
+                    neighbor_groups[edge_type] = []
+                neighbor_groups[edge_type].append(neighbor)
+
+            for edge_type, group in neighbor_groups.items():
+                if len(group) > 1:
+                    compressor_name = f"{prefix or ''}C{compressor_id}"
+                    compressor_id += 1
+                    G.add_node(compressor_name)
+                    compressor_nodes.add(compressor_name)
+
+                    for neighbor in group:
+                        G.remove_edge(node, neighbor)
+                        G.add_edge(neighbor, compressor_name)
+
+                    G.add_edge(compressor_name, node, **dict(edge_type))
+
+    return G, compressor_nodes
 
 
 def _snap_build_graph(G, groups, node_attributes, edge_attributes,
