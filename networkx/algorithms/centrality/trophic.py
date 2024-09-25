@@ -40,7 +40,29 @@ def trophic_levels(G, weight='weight'):
     ----------
     .. [1] Stephen Levine (1980) J. theor. Biol. 83, 195-207
     """
-    pass
+    trophic_levels = {}
+    in_degree = dict(G.in_degree(weight=weight))
+    
+    # Initialize trophic levels
+    for node in G.nodes():
+        if in_degree[node] == 0:
+            trophic_levels[node] = 1
+        else:
+            trophic_levels[node] = 0
+    
+    # Iteratively update trophic levels until convergence
+    converged = False
+    while not converged:
+        old_levels = trophic_levels.copy()
+        for node in G.nodes():
+            if in_degree[node] > 0:
+                trophic_levels[node] = 1 + sum(trophic_levels[pred] * G[pred][node].get(weight, 1) 
+                                               for pred in G.predecessors(node)) / in_degree[node]
+        
+        # Check for convergence
+        converged = all(abs(trophic_levels[node] - old_levels[node]) < 1e-6 for node in G.nodes())
+    
+    return trophic_levels
 
 
 @not_implemented_for('undirected')
@@ -71,7 +93,13 @@ def trophic_differences(G, weight='weight'):
     .. [1] Samuel Johnson, Virginia Dominguez-Garcia, Luca Donetti, Miguel A.
         Munoz (2014) PNAS "Trophic coherence determines food-web stability"
     """
-    pass
+    trophic_levels = trophic_levels(G, weight=weight)
+    diffs = {}
+    
+    for u, v in G.edges():
+        diffs[(u, v)] = trophic_levels[v] - trophic_levels[u]
+    
+    return diffs
 
 
 @not_implemented_for('undirected')
@@ -102,4 +130,17 @@ def trophic_incoherence_parameter(G, weight='weight', cannibalism=False):
     .. [1] Samuel Johnson, Virginia Dominguez-Garcia, Luca Donetti, Miguel A.
         Munoz (2014) PNAS "Trophic coherence determines food-web stability"
     """
-    pass
+    import math
+    
+    diffs = trophic_differences(G, weight=weight)
+    
+    if not cannibalism:
+        diffs = {edge: diff for edge, diff in diffs.items() if edge[0] != edge[1]}
+    
+    if not diffs:
+        return 0.0
+    
+    mean_diff = sum(diffs.values()) / len(diffs)
+    variance = sum((diff - mean_diff) ** 2 for diff in diffs.values()) / len(diffs)
+    
+    return math.sqrt(variance)
