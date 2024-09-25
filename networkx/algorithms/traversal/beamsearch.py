@@ -59,4 +59,26 @@ def bfs_beam_edges(G, source, value, width=None):
     >>> list(nx.bfs_beam_edges(G, source=0, value=centrality.get, width=3))
     [(0, 2), (0, 1), (0, 8), (2, 32), (1, 13), (8, 33)]
     """
-    pass
+    from networkx.utils import MappedQueue
+
+    if source not in G:
+        raise nx.NetworkXError(f"The source node {source} is not in G")
+
+    visited = {source}
+    queue = MappedQueue()
+    queue.push(source, value(source))
+
+    while queue:
+        parent = queue.pop()
+        
+        # Get neighbors not in visited
+        neighbors = set(G.neighbors(parent)) - visited
+        
+        # Sort neighbors by value and limit to width
+        if width is not None:
+            neighbors = sorted(neighbors, key=value, reverse=True)[:width]
+        
+        for child in neighbors:
+            yield parent, child
+            visited.add(child)
+            queue.push(child, value(child))
