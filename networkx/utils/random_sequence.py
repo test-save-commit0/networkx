@@ -13,7 +13,10 @@ def powerlaw_sequence(n, exponent=2.0, seed=None):
     """
     Return sample sequence of length n from a power law distribution.
     """
-    pass
+    if exponent <= 1:
+        raise ValueError("exponent must be greater than 1")
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+    return [rng.pareto(exponent - 1) + 1 for _ in range(n)]
 
 
 @py_random_state(2)
@@ -65,12 +68,34 @@ def zipf_rv(alpha, xmin=1, seed=None):
     .. [1] Luc Devroye, Non-Uniform Random Variate Generation,
        Springer-Verlag, New York, 1986.
     """
-    pass
+    if xmin < 1:
+        raise ValueError("xmin must be >= 1")
+    if alpha <= 1:
+        raise ValueError("alpha must be > 1")
+    
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+    
+    # Rejection method for generating Zipf random variables
+    b = 2 ** (alpha - 1)
+    while True:
+        u = 1 - rng.random()  # Uniform(0,1) random variable
+        v = rng.random()  # Uniform(0,1) random variable
+        x = int(xmin / (u ** (1 / alpha)))
+        t = (1 + 1 / x) ** (alpha - 1)
+        if v * x * (t - 1) / (b - 1) <= t * (b - x):
+            return x
 
 
 def cumulative_distribution(distribution):
     """Returns normalized cumulative distribution from discrete distribution."""
-    pass
+    cdf = []
+    csum = 0
+    for item in distribution:
+        csum += item
+        cdf.append(csum)
+    if csum != 0:
+        cdf = [x / csum for x in cdf]
+    return cdf
 
 
 @py_random_state(3)
@@ -86,7 +111,21 @@ def discrete_sequence(n, distribution=None, cdistribution=None, seed=None):
     cdistribution = normalized discrete cumulative distribution
 
     """
-    pass
+    import bisect
+
+    if distribution is None and cdistribution is None:
+        raise ValueError("Either distribution or cdistribution must be specified")
+
+    if cdistribution is None:
+        cdistribution = cumulative_distribution(distribution)
+
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+    
+    # Generate n random numbers
+    rvs = rng.random(n)
+    
+    # Use bisect to find the index where the random value would be inserted
+    return [bisect.bisect(cdistribution, r) for r in rvs]
 
 
 @py_random_state(2)
@@ -95,7 +134,28 @@ def random_weighted_sample(mapping, k, seed=None):
 
     The input is a dictionary of items with weights as values.
     """
-    pass
+    if k > len(mapping):
+        raise ValueError("Sample size cannot be larger than the population size.")
+    
+    rng = seed if isinstance(seed, nx.utils.RandomState) else nx.utils.RandomState(seed)
+    
+    population = list(mapping.keys())
+    weights = list(mapping.values())
+    
+    result = []
+    total = sum(weights)
+    
+    for i in range(k):
+        r = rng.random() * total
+        for j, w in enumerate(weights):
+            r -= w
+            if r <= 0:
+                result.append(population[j])
+                total -= weights[j]
+                weights[j] = 0
+                break
+    
+    return result
 
 
 @py_random_state(1)
@@ -104,4 +164,4 @@ def weighted_choice(mapping, seed=None):
 
     The input is a dictionary of items with weights as values.
     """
-    pass
+    return random_weighted_sample(mapping, 1, seed)[0]
