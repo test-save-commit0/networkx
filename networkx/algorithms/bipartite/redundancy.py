@@ -94,4 +94,17 @@ def _node_redundancy(G, v):
     `v` must have at least two neighbors in `G`.
 
     """
-    pass
+    neighbors = set(G.neighbors(v))
+    n = len(neighbors)
+    
+    if n < 2:
+        raise NetworkXError(f"Node {v} has fewer than two neighbors")
+    
+    max_overlap = n * (n - 1) / 2
+    overlap = 0
+    
+    for u, w in combinations(neighbors, 2):
+        if any(neighbor for neighbor in G.neighbors(u) & G.neighbors(w) if neighbor != v):
+            overlap += 1
+    
+    return overlap / max_overlap if max_overlap > 0 else 0
