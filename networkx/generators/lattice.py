@@ -52,7 +52,24 @@ def grid_2d_graph(m, n, periodic=False, create_using=None):
         The (possibly periodic) grid graph of the specified dimensions.
 
     """
-    pass
+    G = empty_graph(0, create_using)
+    rows = range(m) if isinstance(m, int) else list(m)
+    cols = range(n) if isinstance(n, int) else list(n)
+    G.add_nodes_from((i, j) for i in rows for j in cols)
+    G.add_edges_from(((i, j), (pi, j))
+                     for pi, i in pairwise(rows) for j in cols)
+    G.add_edges_from(((i, j), (i, pj))
+                     for i in rows for pj, j in pairwise(cols))
+    
+    if periodic:
+        if isinstance(periodic, bool):
+            periodic = (periodic, periodic)
+        if periodic[0]:
+            G.add_edges_from(((rows[-1], j), (rows[0], j)) for j in cols)
+        if periodic[1]:
+            G.add_edges_from(((i, cols[-1]), (i, cols[0])) for i in rows)
+    
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -93,7 +110,24 @@ def grid_graph(dim, periodic=False):
     >>> len(G)
     6
     """
-    pass
+    if isinstance(periodic, bool):
+        periodic = [periodic] * len(dim)
+    elif len(periodic) != len(dim):
+        raise NetworkXError("periodic must be a single bool or an iterable with one bool per dimension")
+
+    dim = [range(d) if isinstance(d, int) else list(d) for d in dim]
+    G = empty_graph(0)
+    for vertex in product(*dim):
+        G.add_node(vertex)
+
+    for i, d in enumerate(dim):
+        for vertex in G:
+            if periodic[i] or vertex[i] < len(d) - 1:
+                new_vertex = list(vertex)
+                new_vertex[i] = (vertex[i] + 1) % len(d)
+                G.add_edge(vertex, tuple(new_vertex))
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -118,7 +152,11 @@ def hypercube_graph(n):
     NetworkX graph
         The hypercube graph of dimension *n*.
     """
-    pass
+    G = empty_graph(2**n)
+    for i in range(2**n):
+        for j in range(n):
+            G.add_edge(i, i ^ (1 << j))
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -177,7 +215,31 @@ def triangular_lattice_graph(m, n, periodic=False, with_positions=True,
     NetworkX graph
         The *m* by *n* triangular lattice graph.
     """
-    pass
+    G = empty_graph(0, create_using)
+    rows = range(m + 1)
+    cols = range((n + 1) // 2)
+    
+    # Add nodes
+    G.add_nodes_from((i, j) for i in rows for j in cols)
+    
+    # Add edges
+    G.add_edges_from(((i, j), (i + 1, j)) for i in range(m) for j in cols)
+    G.add_edges_from(((i, j), (i, j + 1)) for i in rows for j in range((n - 1) // 2))
+    G.add_edges_from(((i, j), (i + 1, j + 1)) for i in range(m) for j in range((n - 1) // 2))
+    
+    if periodic:
+        if m < 3 or n < 5:
+            raise NetworkXError("Periodic lattices require m >= 3 and n >= 5")
+        G.add_edges_from(((0, j), (m, j)) for j in cols)
+        G.add_edges_from(((i, 0), (i, (n + 1) // 2 - 1)) for i in rows)
+        G.add_edges_from(((i, 0), (i + 1, (n + 1) // 2 - 1)) for i in range(m))
+    
+    if with_positions:
+        sqrt3 = sqrt(3)
+        pos = {(i, j): (j * 2 + (i % 2), i * sqrt3 / 2) for i in rows for j in cols}
+        set_node_attributes(G, pos, 'pos')
+    
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -229,4 +291,45 @@ def hexagonal_lattice_graph(m, n, periodic=False, with_positions=True,
     NetworkX graph
         The *m* by *n* hexagonal lattice graph.
     """
-    pass
+    G = empty_graph(0, create_using)
+    
+    if periodic and (n % 2 != 0 or m <= 1 or n <= 1):
+        raise NetworkXError("Periodic hexagonal lattices require even n>1 and m>1")
+    
+    for i in range(m):
+        for j in range(n):
+            G.add_node((i, j, 0))
+            G.add_node((i, j, 1))
+    
+    for i in range(m):
+        for j in range(n):
+            G.add_edge((i, j, 0), (i, j, 1))
+            if i > 0:
+                G.add_edge((i, j, 0), (i - 1, j, 1))
+            if j > 0:
+                G.add_edge((i, j, 0), (i, j - 1, 1))
+    
+    if periodic:
+        for i in range(m):
+            G.add_edge((i, 0, 0), (i, n - 1, 1))
+        for j in range(n):
+            G.add_edge((0, j, 1), (m - 1, j, 0))
+    
+    if with_positions:
+        sqrt3 = sqrt(3)
+        pos = {}
+        for i in range(m):
+            for j in range(n):
+                pos[(i, j, 0)] = (j * 3 / 2, i * sqrt3)
+                pos[(i, j, 1)] = (j * 3 / 2 + 3 / 4, i * sqrt3 + sqrt3 / 2)
+        
+        if periodic:
+            # Adjust positions for periodic boundary conditions
+            for i in range(m):
+                pos[(i, n - 1, 1)] = (pos[(i, 0, 0)][0] - 3 / 4, pos[(i, 0, 0)][1] + sqrt3 / 2)
+            for j in range(n):
+                pos[(m - 1, j, 0)] = (pos[(0, j, 1)][0] + 3 / 4, pos[(0, j, 1)][1] - sqrt3 / 2)
+        
+        set_node_attributes(G, pos, 'pos')
+    
+    return G
