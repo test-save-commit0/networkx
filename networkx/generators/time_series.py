@@ -49,4 +49,23 @@ def visibility_graph(series):
            National Academy of Sciences 105, no. 13 (2008): 4972-4975.
            https://www.pnas.org/doi/10.1073/pnas.0709247105
     """
-    pass
+    G = nx.Graph()
+    n = len(series)
+    
+    # Add all nodes
+    G.add_nodes_from(range(n))
+    
+    # Check visibility between each pair of nodes
+    for i in range(n):
+        for j in range(i + 1, n):
+            # Check if there's visibility between i and j
+            visible = True
+            for k in range(i + 1, j):
+                if (series[k] - series[i]) / (k - i) >= (series[j] - series[i]) / (j - i):
+                    visible = False
+                    break
+            
+            if visible:
+                G.add_edge(i, j)
+    
+    return G
