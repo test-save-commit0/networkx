@@ -12,7 +12,8 @@ __all__ = ['categorical_node_match', 'categorical_edge_match',
 
 def copyfunc(f, name=None):
     """Returns a deepcopy of a function."""
-    pass
+    return types.FunctionType(f.__code__, f.__globals__, name or f.__name__,
+                              f.__defaults__, f.__closure__)
 
 
 def allclose(x, y, rtol=1e-05, atol=1e-08):
@@ -26,7 +27,7 @@ def allclose(x, y, rtol=1e-05, atol=1e-08):
         The absolute error tolerance.
 
     """
-    pass
+    return all(math.isclose(a, b, rel_tol=rtol, abs_tol=atol) for a, b in zip(x, y))
 
 
 categorical_doc = """
@@ -176,7 +177,34 @@ def generic_multiedge_match(attr, default, op):
     >>> nm = generic_node_match(["weight", "color"], [1.0, "red"], [isclose, eq])
 
     """
-    pass
+    if isinstance(attr, str):
+        attr = [attr]
+        default = [default]
+        op = [op]
+    elif len(attr) != len(default) or len(attr) != len(op):
+        raise ValueError("attr, default, and op must have the same length")
+
+    def match(d1, d2):
+        for a, def_val, operator in zip(attr, default, op):
+            v1 = d1.get(a, def_val)
+            v2 = d2.get(a, def_val)
+
+            if not operator(v1, v2):
+                return False
+
+        return True
+
+    def edge_match(e1, e2):
+        if len(e1) != len(e2):
+            return False
+
+        for attrs1, attrs2 in permutations(e1.values(), len(e2)):
+            if all(match(attrs1, attrs2) for attrs1, attrs2 in zip(e1.values(), e2.values())):
+                return True
+
+        return False
+
+    return edge_match
 
 
 generic_node_match.__doc__ = generic_doc
