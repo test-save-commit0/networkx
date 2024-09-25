@@ -77,4 +77,59 @@ def spectral_graph_forge(G, alpha, transformation='identity', seed=None):
     >>> H = nx.spectral_graph_forge(G, 0.3)
     >>>
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+    from scipy.sparse.linalg import eigsh
+
+    if transformation not in ['identity', 'modularity']:
+        raise nx.NetworkXError("transformation must be 'identity' or 'modularity'")
+
+    # Get adjacency matrix
+    A = nx.to_scipy_sparse_array(G, dtype=float)
+    n = A.shape[0]
+
+    # Apply transformation
+    if transformation == 'modularity':
+        k = A.sum(axis=1)
+        m = k.sum() / 2
+        B = A - k * k.T / (2 * m)
+    else:  # identity transformation
+        B = A
+
+    # Compute eigenvectors
+    k = int(alpha * n)
+    if k < 1:
+        k = 1
+    eigvals, eigvecs = eigsh(B, k=k, which='LA')
+
+    # Filter eigenvectors
+    filtered = eigvecs @ np.diag(eigvals) @ eigvecs.T
+
+    # Ensure symmetry
+    filtered = (filtered + filtered.T) / 2
+
+    # Scale to [0, 1] range
+    min_val = filtered.min()
+    max_val = filtered.max()
+    if min_val != max_val:
+        filtered = (filtered - min_val) / (max_val - min_val)
+
+    # Generate random graph
+    H = nx.Graph()
+    H.add_nodes_from(G.nodes())
+
+    # Use upper triangular part for efficiency
+    upper_indices = np.triu_indices(n, k=1)
+    probabilities = filtered[upper_indices]
+    
+    # Generate random values
+    random_values = seed.random(len(probabilities))
+    
+    # Add edges where random value is less than probability
+    edges = [(upper_indices[0][i], upper_indices[1][i]) 
+             for i in range(len(probabilities)) 
+             if random_values[i] < probabilities[i]]
+    
+    H.add_edges_from(edges)
+
+    return H
