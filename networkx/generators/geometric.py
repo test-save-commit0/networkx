@@ -64,7 +64,28 @@ def geometric_edges(G, radius, p=2, *, pos_name='pos'):
     >>> nx.geometric_edges(G, radius=9)
     [(0, 1), (0, 2), (1, 2)]
     """
-    pass
+    try:
+        from scipy.spatial import cKDTree
+        use_scipy = True
+    except ImportError:
+        use_scipy = False
+
+    nodes = list(G)
+    nodes_pos = [G.nodes[v][pos_name] for v in nodes]
+
+    if use_scipy:
+        kdtree = cKDTree(nodes_pos)
+        pairs = kdtree.query_pairs(r=radius, p=p)
+        edges = [(nodes[i], nodes[j]) for i, j in pairs]
+    else:
+        edges = []
+        for i, u in enumerate(nodes):
+            for j, v in enumerate(nodes[i + 1:], start=i + 1):
+                dist = sum(abs(x - y) ** p for x, y in zip(nodes_pos[i], nodes_pos[j])) ** (1 / p)
+                if dist <= radius:
+                    edges.append((u, v))
+
+    return edges
 
 
 def _geometric_edges(G, radius, p, pos_name):
@@ -150,7 +171,26 @@ def random_geometric_graph(n, radius, dim=2, pos=None, p=2, seed=None, *,
            Oxford Studies in Probability, 5, 2003.
 
     """
-    pass
+    import numpy as np
+    from networkx.utils import py_random_state
+
+    @py_random_state(6)
+    def _random_geometric_graph(n, radius, dim, pos, p, seed, pos_name):
+        G = nx.Graph()
+        G.name = f"Random Geometric Graph (n={n}, radius={radius}, dim={dim})"
+
+        if pos is None:
+            pos = {i: seed.uniform(size=dim) for i in range(n)}
+        
+        G.add_nodes_from(pos.keys())
+        nx.set_node_attributes(G, pos, pos_name)
+
+        edges = geometric_edges(G, radius, p, pos_name=pos_name)
+        G.add_edges_from(edges)
+
+        return G
+
+    return _random_geometric_graph(n, radius, dim, pos, p, seed, pos_name)
 
 
 @py_random_state(6)
