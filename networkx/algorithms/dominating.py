@@ -42,7 +42,22 @@ def dominating_set(G, start_with=None):
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if len(G) == 0:
+        return set()
+    
+    if start_with is None:
+        start_with = arbitrary_element(G)
+    
+    dom_set = {start_with}
+    undominated = set(G) - set(G[start_with]) - {start_with}
+    
+    while undominated:
+        # Find the node that dominates the most undominated nodes
+        best_node = max(G, key=lambda n: len(set(G[n]) & undominated))
+        dom_set.add(best_node)
+        undominated -= set(G[best_node]) | {best_node}
+    
+    return dom_set
 
 
 @nx._dispatchable
@@ -69,4 +84,8 @@ def is_dominating_set(G, nbunch):
     .. [1] https://en.wikipedia.org/wiki/Dominating_set
 
     """
-    pass
+    nbunch = set(nbunch)
+    if not nbunch.issubset(G):
+        raise nx.NetworkXError("nbunch is not a subset of the nodes of G")
+    
+    return set(G) <= set(chain.from_iterable(G[n] for n in nbunch)) | nbunch
