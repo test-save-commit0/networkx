@@ -37,7 +37,28 @@ def _generate_graph6_bytes(G, nodes, header):
     the graph6 format (that is, greater than ``2 ** 36`` nodes).
 
     """
-    pass
+    if len(G) >= 2**36:
+        raise ValueError("graph6 format supports only graphs with less than 2^36 nodes")
+    
+    if header:
+        yield b'>>graph6<<'
+
+    n = len(nodes)
+    yield from n_to_data(n)
+
+    edges = G.subgraph(nodes).edges()
+    bits = ((i < j and (i, j) in edges) for j in range(n) for i in range(j))
+    char = 0
+    for i, bit in enumerate(bits):
+        char = (char << 1) | bit
+        if (i + 1) % 6 == 0:
+            yield bytes([char + 63])
+            char = 0
+    if i % 6 != 5:
+        char <<= 5 - (i % 6)
+        yield bytes([char + 63])
+    
+    yield b'\n'
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -78,7 +99,23 @@ def from_graph6_bytes(bytes_in):
            <http://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    if bytes_in.startswith(b'>>graph6<<'):
+        bytes_in = bytes_in[10:]
+
+    if not all(63 <= c < 127 for c in bytes_in if c != ord('\n')):
+        raise ValueError("Invalid character in graph6 data")
+
+    n, data = data_to_n(bytes_in)
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+
+    bits = iter((ord(c) - 63) & 0b111111 for c in data)
+    for j in range(1, n):
+        for i in range(j):
+            if next(bits, None):
+                G.add_edge(i, j)
+
+    return G
 
 
 @not_implemented_for('directed')
@@ -128,7 +165,12 @@ def to_graph6_bytes(G, nodes=None, header=True):
            <http://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    if nodes is None:
+        nodes = list(G.nodes())
+    else:
+        nodes = list(nodes)
+
+    return b''.join(_generate_graph6_bytes(G, nodes, header))
 
 
 @open_file(0, mode='rb')
@@ -183,7 +225,13 @@ def read_graph6(path):
            <http://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    with open(path, 'rb') as f:
+        lines = [line.strip() for line in f if line.strip()]
+    
+    if len(lines) == 1:
+        return from_graph6_bytes(lines[0])
+    else:
+        return [from_graph6_bytes(line) for line in lines]
 
 
 @not_implemented_for('directed')
@@ -244,7 +292,8 @@ def write_graph6(G, path, nodes=None, header=True):
            <http://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    with open(path, 'wb') as f:
+        f.write(to_graph6_bytes(G, nodes=nodes, header=header))
 
 
 @not_implemented_for('directed')
@@ -304,7 +353,7 @@ def write_graph6_file(G, f, nodes=None, header=True):
            <http://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    f.write(to_graph6_bytes(G, nodes=nodes, header=header))
 
 
 def data_to_n(data):
@@ -312,7 +361,11 @@ def data_to_n(data):
     integer sequence.
 
     Return (value, rest of seq.)"""
-    pass
+    if data[0] <= 62:
+        return data[0], data[1:]
+    if data[1] <= 62:
+        return (data[0] - 63) * 64 + data[1], data[2:]
+    return (data[0] - 63) * 64 * 64 + (data[1] - 63) * 64 + data[2], data[3:]
 
 
 def n_to_data(n):
@@ -321,4 +374,8 @@ def n_to_data(n):
     This function is undefined if `n` is not in ``range(2 ** 36)``.
 
     """
-    pass
+    if n <= 62:
+        return bytes([n + 63])
+    if n <= 258047:
+        return bytes([126, (n >> 6) + 63, (n & 63) + 63])
+    return bytes([126, 126, (n >> 12) + 63, ((n >> 6) & 63) + 63, (n & 63) + 63])
