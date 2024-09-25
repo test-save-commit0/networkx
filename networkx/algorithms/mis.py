@@ -58,4 +58,36 @@ def maximal_independent_set(G, nodes=None, seed=None):
     This algorithm does not solve the maximum independent set problem.
 
     """
-    pass
+    import random
+
+    # Check if the graph is directed
+    if G.is_directed():
+        raise nx.NetworkXNotImplemented("Not implemented for directed graphs.")
+
+    # Initialize the independent set with the given nodes
+    if nodes is not None:
+        independent_set = set(nodes)
+        # Check if the given nodes are in the graph and form an independent set
+        if not all(node in G for node in independent_set):
+            raise nx.NetworkXUnfeasible("Given nodes are not in the graph.")
+        if any(v in G[u] for u in independent_set for v in independent_set if u != v):
+            raise nx.NetworkXUnfeasible("Given nodes do not form an independent set.")
+    else:
+        independent_set = set()
+
+    # Create a set of candidate nodes (all nodes not in the independent set)
+    candidates = set(G.nodes()) - independent_set
+
+    # Set the random seed
+    random.seed(seed)
+
+    while candidates:
+        # Randomly select a node from the candidates
+        node = random.choice(list(candidates))
+        # Add the node to the independent set
+        independent_set.add(node)
+        # Remove the node and its neighbors from the candidates
+        candidates.remove(node)
+        candidates -= set(G[node])
+
+    return list(independent_set)
