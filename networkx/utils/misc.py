@@ -27,7 +27,16 @@ __all__ = ['flatten', 'make_list_of_ints', 'dict_to_numpy_array',
 
 def flatten(obj, result=None):
     """Return flattened version of (possibly nested) iterable object."""
-    pass
+    if result is None:
+        result = []
+    try:
+        iter(obj)
+    except TypeError:
+        result.append(obj)
+    else:
+        for item in obj:
+            flatten(item, result)
+    return result
 
 
 def make_list_of_ints(sequence):
@@ -39,13 +48,42 @@ def make_list_of_ints(sequence):
     If sequence is a list, the non-int values are replaced with ints.
     So, no new list is created
     """
-    pass
+    if isinstance(sequence, list):
+        for i, item in enumerate(sequence):
+            if not isinstance(item, int):
+                try:
+                    int_value = int(item)
+                    if int_value != item:
+                        raise ValueError(f"Element {item} not integral")
+                    sequence[i] = int_value
+                except (ValueError, TypeError):
+                    raise ValueError(f"Element {item} not integral")
+        return sequence
+    else:
+        return [int(item) for item in sequence]
 
 
 def dict_to_numpy_array(d, mapping=None):
     """Convert a dictionary of dictionaries to a numpy array
     with optional mapping."""
-    pass
+    try:
+        import numpy as np
+    except ImportError:
+        raise ImportError("dict_to_numpy_array requires numpy")
+
+    if mapping is None:
+        s = set(d.keys())
+        for k, v in d.items():
+            s.update(v.keys())
+        mapping = dict(zip(s, range(len(s))))
+
+    n = len(mapping)
+    a = np.zeros((n, n))
+    for k1, v in d.items():
+        for k2, value in v.items():
+            i, j = mapping[k1], mapping[k2]
+            a[i, j] = value
+    return a
 
 
 def _dict_to_numpy_array2(d, mapping=None):
@@ -53,12 +91,43 @@ def _dict_to_numpy_array2(d, mapping=None):
     with optional mapping.
 
     """
-    pass
+    try:
+        import numpy as np
+    except ImportError:
+        raise ImportError("_dict_to_numpy_array2 requires numpy")
+
+    if mapping is None:
+        s = set(d.keys())
+        for k, v in d.items():
+            s.update(v.keys())
+        mapping = dict(zip(s, range(len(s))))
+
+    n = len(mapping)
+    a = np.zeros((n, n))
+    for k1, v in d.items():
+        for k2, value in v.items():
+            i, j = mapping[k1], mapping[k2]
+            a[i, j] = value
+    return a
 
 
 def _dict_to_numpy_array1(d, mapping=None):
     """Convert a dictionary of numbers to a 1d numpy array with optional mapping."""
-    pass
+    try:
+        import numpy as np
+    except ImportError:
+        raise ImportError("_dict_to_numpy_array1 requires numpy")
+
+    if mapping is None:
+        s = set(d.keys())
+        mapping = dict(zip(s, range(len(s))))
+
+    n = len(mapping)
+    a = np.zeros(n)
+    for k, v in d.items():
+        i = mapping[k]
+        a[i] = v
+    return a
 
 
 def arbitrary_element(iterable):
