@@ -47,7 +47,8 @@ def _require_partition(G, partition):
         networkx.exception.NetworkXError: `partition` is not a valid partition of the nodes of G
 
     """
-    pass
+    if not is_partition(G, partition):
+        raise NotAPartition(G, partition)
 
 
 require_partition = argmap(_require_partition, (0, 1))
@@ -68,7 +69,7 @@ def intra_community_edges(G, partition):
     in the same block of the partition.
 
     """
-    pass
+    return sum(G.subgraph(community).number_of_edges() for community in partition)
 
 
 @nx._dispatchable
@@ -91,7 +92,16 @@ def inter_community_edges(G, partition):
     that may require the same amount of memory as that of `G`.
 
     """
-    pass
+    # Create a graph with communities as nodes
+    community_graph = nx.Graph()
+    community_graph.add_nodes_from(range(len(partition)))
+
+    for i, community1 in enumerate(partition):
+        for j, community2 in enumerate(partition[i+1:], start=i+1):
+            if any(G.has_edge(u, v) for u in community1 for v in community2):
+                community_graph.add_edge(i, j)
+
+    return community_graph.number_of_edges()
 
 
 @nx._dispatchable
@@ -116,7 +126,14 @@ def inter_community_non_edges(G, partition):
     store `G`.
 
     """
-    pass
+    # Create a complete graph with the same nodes as G
+    H = nx.complete_graph(G.nodes())
+    
+    # Remove edges that exist in G
+    H.remove_edges_from(G.edges())
+    
+    # Count inter-community non-edges
+    return sum(1 for u, v in H.edges() if any(u in c1 and v in c2 for c1 in partition for c2 in partition if c1 != c2))
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -204,7 +221,28 @@ def modularity(G, communities, weight='weight', resolution=1):
        networks" J. Stat. Mech 10008, 1-12 (2008).
        https://doi.org/10.1088/1742-5468/2008/10/P10008
     """
-    pass
+    if not isinstance(communities, list):
+        communities = list(communities)
+    if not is_partition(G, communities):
+        raise NotAPartition(G, communities)
+
+    directed = G.is_directed()
+    m = G.size(weight=weight)
+    if m == 0:
+        return 0.0
+
+    Q = 0.0
+    for community in communities:
+        community_edges = G.subgraph(community).size(weight=weight)
+        community_degree = sum(dict(G.degree(community, weight=weight)).values())
+        if directed:
+            in_degree = sum(dict(G.in_degree(community, weight=weight)).values())
+            out_degree = sum(dict(G.out_degree(community, weight=weight)).values())
+            Q += community_edges / m - resolution * ((in_degree * out_degree) / (m * m))
+        else:
+            Q += community_edges / m - resolution * ((community_degree / (2 * m)) ** 2)
+
+    return Q
 
 
 @require_partition
@@ -253,4 +291,22 @@ def partition_quality(G, partition):
            *Physical Reports*, Volume 486, Issue 3--5 pp. 75--174
            <https://arxiv.org/abs/0906.0612>
     """
-    pass
+    node_community = {}
+    for i, community in enumerate(partition):
+        for node in community:
+            node_community[node] = i
+
+    num_intra_edges = sum(1 for u, v in G.edges() if node_community[u] == node_community[v])
+    num_edges = G.number_of_edges()
+    coverage = num_intra_edges / num_edges if num_edges > 0 else 0.0
+
+    if G.is_multigraph():
+        return coverage, -1.0
+
+    num_nodes = G.number_of_nodes()
+    num_possible_edges = num_nodes * (num_nodes - 1) // 2
+    num_inter_non_edges = sum(1 for u, v in combinations(G.nodes(), 2)
+                              if not G.has_edge(u, v) and node_community[u] != node_community[v])
+    performance = (num_intra_edges + num_inter_non_edges) / num_possible_edges
+
+    return coverage, performance
