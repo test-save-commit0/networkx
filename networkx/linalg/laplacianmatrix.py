@@ -299,14 +299,46 @@ def total_spanning_tree_weight(G, weight=None, root=None):
         "Matrix-Tree Theorem for Directed Graphs"
         https://www.math.uchicago.edu/~may/VIGRE/VIGRE2010/REUPapers/Margoliash.pdf
     """
-    pass
+    import warnings
+    warnings.warn(
+        "total_spanning_tree_weight is deprecated and will be removed in v3.5. "
+        "Use nx.number_of_spanning_trees(G) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    
+    if not G.nodes():
+        raise nx.NetworkXPointlessConcept("G does not contain any nodes.")
+    
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("G is not connected.")
+    
+    if G.is_directed():
+        if root is None or root not in G:
+            raise nx.NetworkXError("For directed graphs, root must be specified and be in G.")
+        return _directed_total_spanning_tree_weight(G, weight, root)
+    else:
+        return _undirected_total_spanning_tree_weight(G, weight)
+
+def _undirected_total_spanning_tree_weight(G, weight):
+    import numpy as np
+    L = laplacian_matrix(G, weight=weight).toarray()
+    n = G.number_of_nodes()
+    return np.linalg.det(L[1:, 1:])
+
+def _directed_total_spanning_tree_weight(G, weight, root):
+    import numpy as np
+    L = laplacian_matrix(G, weight=weight).toarray()
+    n = G.number_of_nodes()
+    root_index = list(G.nodes()).index(root)
+    L_reduced = np.delete(np.delete(L, root_index, 0), root_index, 1)
+    return np.linalg.det(L_reduced)
 
 
 @not_implemented_for('undirected')
 @not_implemented_for('multigraph')
 @nx._dispatchable(edge_attrs='weight')
-def directed_laplacian_matrix(G, nodelist=None, weight='weight', walk_type=
-    None, alpha=0.95):
+def directed_laplacian_matrix(G, nodelist=None, weight='weight', walk_type=None, alpha=0.95):
     """Returns the directed Laplacian matrix of G.
 
     The graph directed Laplacian is the matrix
@@ -373,14 +405,40 @@ def directed_laplacian_matrix(G, nodelist=None, weight='weight', walk_type=
        Laplacians and the Cheeger inequality for directed graphs.
        Annals of Combinatorics, 9(1), 2005
     """
-    pass
+    import numpy as np
+    import scipy.sparse as sp
+    from scipy.sparse.linalg import eigs
+
+    if not G.is_directed():
+        raise nx.NetworkXError("Graph must be directed.")
+
+    if walk_type is None:
+        if nx.is_strongly_connected(G) and nx.is_aperiodic(G):
+            walk_type = "random"
+        elif nx.is_strongly_connected(G):
+            walk_type = "lazy"
+        else:
+            walk_type = "pagerank"
+
+    P = _transition_matrix(G, nodelist=nodelist, weight=weight, walk_type=walk_type, alpha=alpha)
+
+    n, m = P.shape
+    evals, evecs = eigs(P.T, k=1, which='LM')
+    phi = evecs.flatten().real
+    phi = phi / phi.sum()
+    Phi = sp.spdiags(phi, 0, m, n)
+    Phi_sqrt = sp.spdiags(np.sqrt(phi), 0, m, n)
+    Phi_inv_sqrt = sp.spdiags(1.0 / np.sqrt(phi), 0, m, n)
+
+    L = sp.eye(n, format='csr') - 0.5 * (Phi_sqrt * P * Phi_inv_sqrt + Phi_inv_sqrt * P.T * Phi_sqrt)
+
+    return L
 
 
 @not_implemented_for('undirected')
 @not_implemented_for('multigraph')
 @nx._dispatchable(edge_attrs='weight')
-def directed_combinatorial_laplacian_matrix(G, nodelist=None, weight=
-    'weight', walk_type=None, alpha=0.95):
+def directed_combinatorial_laplacian_matrix(G, nodelist=None, weight='weight', walk_type=None, alpha=0.95):
     """Return the directed combinatorial Laplacian matrix of G.
 
     The graph directed combinatorial Laplacian is the matrix
@@ -446,11 +504,35 @@ def directed_combinatorial_laplacian_matrix(G, nodelist=None, weight=
        Laplacians and the Cheeger inequality for directed graphs.
        Annals of Combinatorics, 9(1), 2005
     """
-    pass
+    import numpy as np
+    import scipy.sparse as sp
+    from scipy.sparse.linalg import eigs
+
+    if not G.is_directed():
+        raise nx.NetworkXError("Graph must be directed.")
+
+    if walk_type is None:
+        if nx.is_strongly_connected(G) and nx.is_aperiodic(G):
+            walk_type = "random"
+        elif nx.is_strongly_connected(G):
+            walk_type = "lazy"
+        else:
+            walk_type = "pagerank"
+
+    P = _transition_matrix(G, nodelist=nodelist, weight=weight, walk_type=walk_type, alpha=alpha)
+
+    n, m = P.shape
+    evals, evecs = eigs(P.T, k=1, which='LM')
+    phi = evecs.flatten().real
+    phi = phi / phi.sum()
+    Phi = sp.spdiags(phi, 0, m, n)
+
+    L = Phi - 0.5 * (Phi * P + P.T * Phi)
+
+    return L
 
 
-def _transition_matrix(G, nodelist=None, weight='weight', walk_type=None,
-    alpha=0.95):
+def _transition_matrix(G, nodelist=None, weight='weight', walk_type=None, alpha=0.95):
     """Returns the transition matrix of G.
 
     This is a row stochastic giving the transition probabilities while
@@ -491,4 +573,39 @@ def _transition_matrix(G, nodelist=None, weight='weight', walk_type=None,
     NetworkXError
         If walk_type not specified or alpha not in valid range
     """
-    pass
+    import numpy as np
+    import scipy.sparse as sp
+
+    if nodelist is None:
+        nodelist = list(G)
+    
+    A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, format='csr')
+    n, m = A.shape
+    
+    if walk_type is None:
+        if nx.is_strongly_connected(G) and nx.is_aperiodic(G):
+            walk_type = "random"
+        elif nx.is_strongly_connected(G):
+            walk_type = "lazy"
+        else:
+            walk_type = "pagerank"
+    
+    if walk_type == "random":
+        out_degree = A.sum(axis=1)
+        out_degree[out_degree != 0] = 1.0 / out_degree[out_degree != 0]
+        P = sp.spdiags(out_degree.flatten(), [0], m, n) * A
+    elif walk_type == "lazy":
+        out_degree = A.sum(axis=1)
+        out_degree[out_degree != 0] = 1.0 / out_degree[out_degree != 0]
+        P = 0.5 * (sp.eye(n, format='csr') + sp.spdiags(out_degree.flatten(), [0], m, n) * A)
+    elif walk_type == "pagerank":
+        if not 0.0 < alpha < 1.0:
+            raise nx.NetworkXError('alpha must be between 0 and 1')
+        A = A.astype(float)
+        out_degree = A.sum(axis=1)
+        out_degree[out_degree != 0] = 1.0 / out_degree[out_degree != 0]
+        P = alpha * sp.spdiags(out_degree.flatten(), [0], m, n) * A + (1 - alpha) / n * sp.csr_matrix((n, n), dtype=float)
+    else:
+        raise nx.NetworkXError("walk_type must be random, lazy, or pagerank")
+
+    return P
