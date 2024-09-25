@@ -22,8 +22,70 @@ def metric_closure(G, weight='weight'):
         Metric closure of the graph `G`.
 
     """
-    pass
+    M = nx.Graph()
+    M.add_nodes_from(G)
+    for u in G:
+        for v in G:
+            if u != v:
+                d = nx.shortest_path_length(G, u, v, weight=weight)
+                M.add_edge(u, v, weight=d)
+    return M
 
+
+def _kou_steiner_tree(G, terminal_nodes, weight='weight'):
+    # Step 1: Compute the complete distance graph of the terminal nodes
+    M = metric_closure(G, weight=weight)
+    H = M.subgraph(terminal_nodes)
+
+    # Step 2: Compute the minimum spanning tree of H
+    mst = nx.minimum_spanning_tree(H, weight=weight)
+
+    # Step 3: Compute the subgraph of G by replacing each edge in mst
+    # with the corresponding shortest path in G
+    steiner_tree = nx.Graph()
+    for u, v in mst.edges():
+        path = nx.shortest_path(G, u, v, weight=weight)
+        nx.add_path(steiner_tree, path, weight=G[path[0]][path[1]][weight])
+
+    # Step 4: Compute the minimum spanning tree of steiner_tree
+    return nx.minimum_spanning_tree(steiner_tree, weight=weight)
+
+def _mehlhorn_steiner_tree(G, terminal_nodes, weight='weight'):
+    # Step 1: For each non-terminal node, find the closest terminal node
+    closest_terminal = {}
+    for v in G:
+        if v not in terminal_nodes:
+            distances = [(t, nx.shortest_path_length(G, v, t, weight=weight)) for t in terminal_nodes]
+            closest_terminal[v] = min(distances, key=lambda x: x[1])[0]
+
+    # Step 2: Construct the complete graph on terminal nodes
+    H = nx.Graph()
+    for u in terminal_nodes:
+        for v in terminal_nodes:
+            if u != v:
+                path = nx.shortest_path(G, u, v, weight=weight)
+                distance = sum(G[path[i]][path[i+1]][weight] for i in range(len(path)-1))
+                H.add_edge(u, v, weight=distance)
+
+    # Step 3: Find the minimum spanning tree of H
+    mst = nx.minimum_spanning_tree(H, weight=weight)
+
+    # Step 4: Expand the tree to include the shortest paths in G
+    steiner_tree = nx.Graph()
+    for u, v in mst.edges():
+        path = nx.shortest_path(G, u, v, weight=weight)
+        nx.add_path(steiner_tree, path, weight=G[path[0]][path[1]][weight])
+
+    # Step 5: Remove non-terminal leaves
+    while True:
+        leaves = [node for node in steiner_tree if steiner_tree.degree(node) == 1]
+        non_terminal_leaves = [leaf for leaf in leaves if leaf not in terminal_nodes]
+        if not non_terminal_leaves:
+            break
+        for leaf in non_terminal_leaves:
+            steiner_tree.remove_node(leaf)
+
+    return steiner_tree
 
 ALGORITHMS = {'kou': _kou_steiner_tree, 'mehlhorn': _mehlhorn_steiner_tree}
 
