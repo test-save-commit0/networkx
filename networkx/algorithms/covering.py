@@ -68,7 +68,27 @@ def min_edge_cover(G, matching_algorithm=None):
     simply this function with a default matching algorithm of
     :func:`~networkx.algorithms.bipartite.matching.hopcraft_karp_matching`
     """
-    pass
+    if matching_algorithm is None:
+        matching_algorithm = nx.algorithms.matching.max_weight_matching
+
+    # Find a maximum matching
+    matching = matching_algorithm(G)
+
+    # Convert matching to a set of edges if it's a dictionary
+    if isinstance(matching, dict):
+        matching = set((u, v) for u, v in matching.items() if u < v)
+
+    # Create a set to store the edge cover
+    edge_cover = set(matching)
+
+    # Add edges to cover unmatched nodes
+    for node in G:
+        if not any(node in edge for edge in edge_cover):
+            # Find an arbitrary neighbor
+            neighbor = next(iter(G[node]))
+            edge_cover.add((min(node, neighbor), max(node, neighbor)))
+
+    return edge_cover
 
 
 @not_implemented_for('directed')
@@ -105,4 +125,4 @@ def is_edge_cover(G, cover):
     An edge cover of a graph is a set of edges such that every node of
     the graph is incident to at least one edge of the set.
     """
-    pass
+    return all(any((u, v) in cover or (v, u) in cover for v in G[u]) for u in G)
