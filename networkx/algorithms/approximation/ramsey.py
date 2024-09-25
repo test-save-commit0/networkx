@@ -34,4 +34,19 @@ def ramsey_R2(G):
     NetworkXNotImplemented
         If the graph is directed or is a multigraph.
     """
-    pass
+    if len(G) == 0:
+        return set(), set()
+
+    v = arbitrary_element(G)
+    G_v = G.subgraph(set(G) - {v} - set(G[v]))
+    clique_G_v, indep_G_v = ramsey_R2(G_v)
+    clique_N_v, indep_N_v = ramsey_R2(G.subgraph(G[v]))
+
+    if len(clique_N_v) > len(indep_G_v):
+        clique = {v} | clique_N_v
+        indep = indep_G_v
+    else:
+        clique = clique_G_v
+        indep = {v} | indep_G_v
+
+    return clique, indep
