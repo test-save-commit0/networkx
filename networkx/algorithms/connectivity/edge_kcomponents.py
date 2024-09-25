@@ -80,7 +80,17 @@ def k_edge_components(G, k):
         k-edge-connected components.
         http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0136264
     """
-    pass
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    
+    if k == 1:
+        return nx.connected_components(G) if G.is_directed() else nx.weakly_connected_components(G)
+    
+    if k == 2 and not G.is_directed():
+        return bridge_components(G)
+    
+    aux_graph = EdgeComponentAuxGraph.construct(G)
+    return aux_graph.k_edge_components(k)
 
 
 @not_implemented_for('multigraph')
@@ -144,7 +154,13 @@ def k_edge_subgraphs(G, k):
         Technology 2012 480-–491.
         https://openproceedings.org/2012/conf/edbt/ZhouLYLCL12.pdf
     """
-    pass
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    
+    if k == 1 or (k == 2 and not G.is_directed()):
+        return k_edge_components(G, k)
+    
+    return _k_edge_subgraphs_nodes(G, k)
 
 
 def _k_edge_subgraphs_nodes(G, k):
@@ -152,7 +168,12 @@ def _k_edge_subgraphs_nodes(G, k):
 
     This allows k_edge_subgraphs to return a generator.
     """
-    pass
+    for component in _high_degree_components(G, k):
+        subgraph = G.subgraph(component)
+        if nx.edge_connectivity(subgraph) >= k:
+            yield set(subgraph.nodes())
+        else:
+            yield from general_k_edge_subgraphs(subgraph, k)
 
 
 @not_implemented_for('directed')
@@ -194,7 +215,14 @@ def bridge_components(G):
     >>> sorted(map(sorted, bridge_components(G)))
     [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]
     """
-    pass
+    for component in nx.connected_components(G):
+        subgraph = G.subgraph(component)
+        bridges = list(nx.bridges(subgraph))
+        if not bridges:
+            yield set(component)
+        else:
+            subgraph.remove_edges_from(bridges)
+            yield from nx.connected_components(subgraph)
 
 
 class EdgeComponentAuxGraph:
@@ -339,7 +367,9 @@ class EdgeComponentAuxGraph:
 
 def _low_degree_nodes(G, k, nbunch=None):
     """Helper for finding nodes with degree less than k."""
-    pass
+    if nbunch is None:
+        nbunch = G.nodes()
+    return (n for n in nbunch if G.degree(n) < k)
 
 
 def _high_degree_components(G, k):
@@ -348,7 +378,14 @@ def _high_degree_components(G, k):
     Removes and generates each node with degree less than k.  Then generates
     remaining components where all nodes have degree at least k.
     """
-    pass
+    H = G.copy()
+    low_degree = list(_low_degree_nodes(H, k))
+    H.remove_nodes_from(low_degree)
+    for node in low_degree:
+        yield {node}
+    for component in nx.connected_components(H):
+        if len(component) > 1:
+            yield component
 
 
 @nx._dispatchable(returns_graph=True)
@@ -405,4 +442,14 @@ def general_k_edge_subgraphs(G, k):
     >>> sorted(len(k_sg) for k_sg in k_edge_subgraphs(G, k=3))
     [1, 1, 1, 4, 4]
     """
-    pass
+    if len(G) == 1:
+        yield G
+        return
+
+    cut_value, partition = nx.stoer_wagner(G)
+    if cut_value >= k:
+        yield G
+    else:
+        for part in partition:
+            subgraph = G.subgraph(part)
+            yield from general_k_edge_subgraphs(subgraph, k)
