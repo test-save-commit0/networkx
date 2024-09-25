@@ -79,7 +79,34 @@ def core_number(G):
        Vladimir Batagelj and Matjaz Zaversnik, 2003.
        https://arxiv.org/abs/cs.DS/0310049
     """
-    pass
+    if len(G) == 0:
+        return {}
+
+    degrees = dict(G.degree())
+    node_list = sorted(degrees, key=degrees.get)
+    bin_boundaries = [0]
+    curr_degree = 0
+    for i, v in enumerate(node_list):
+        if degrees[v] > curr_degree:
+            bin_boundaries.extend([i] * (degrees[v] - curr_degree))
+            curr_degree = degrees[v]
+    node_pos = {v: pos for pos, v in enumerate(node_list)}
+    core = degrees.copy()
+
+    for v in node_list:
+        for u in G[v]:
+            if core[u] > core[v]:
+                G.nodes[u]['bin_start'] = bin_boundaries[core[u]]
+                G.nodes[u]['bin_end'] = bin_boundaries[core[u] + 1]
+                pos = node_pos[u]
+                bin_start = G.nodes[u]['bin_start']
+                node_list[bin_start], node_list[pos] = node_list[pos], node_list[bin_start]
+                node_pos[node_list[bin_start]] = bin_start
+                node_pos[node_list[pos]] = pos
+                G.nodes[u]['bin_start'] += 1
+                core[u] -= 1
+
+    return core
 
 
 def _core_subgraph(G, k_filter, k=None, core=None):
@@ -101,7 +128,12 @@ def _core_subgraph(G, k_filter, k=None, core=None):
       If not specified, the core numbers will be computed from `G`.
 
     """
-    pass
+    if core is None:
+        core = core_number(G)
+    if k is None:
+        k = max(core.values())
+    nodes = (v for v in G.nodes() if k_filter(v, k, core))
+    return G.subgraph(nodes).copy()
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -160,7 +192,11 @@ def k_core(G, k=None, core_number=None):
        Vladimir Batagelj and Matjaz Zaversnik,  2003.
        https://arxiv.org/abs/cs.DS/0310049
     """
-    pass
+    if core_number is None:
+        core_number = nx.core_number(G)
+    if k is None:
+        k = max(core_number.values())
+    return _core_subgraph(G, lambda v, k, c: c[v] >= k, k=k, core=core_number)
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -225,7 +261,11 @@ def k_shell(G, k=None, core_number=None):
        and Eran Shir, PNAS  July 3, 2007   vol. 104  no. 27  11150-11154
        http://www.pnas.org/content/104/27/11150.full
     """
-    pass
+    if core_number is None:
+        core_number = nx.core_number(G)
+    if k is None:
+        k = max(core_number.values())
+    return _core_subgraph(G, lambda v, k, c: c[v] == k, k=k, core=core_number)
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -287,7 +327,14 @@ def k_crust(G, k=None, core_number=None):
        and Eran Shir, PNAS  July 3, 2007   vol. 104  no. 27  11150-11154
        http://www.pnas.org/content/104/27/11150.full
     """
-    pass
+    if core_number is None:
+        core_number = nx.core_number(G)
+    if k is None:
+        k = max(core_number.values())
+    H = G.copy()
+    H.remove_edges_from(G.edges(k_core(G, k + 1, core_number).nodes()))
+    H.remove_nodes_from(list(nx.isolates(H)))
+    return H
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -347,7 +394,12 @@ def k_corona(G, k, core_number=None):
        Phys. Rev. E 73, 056101 (2006)
        http://link.aps.org/doi/10.1103/PhysRevE.73.056101
     """
-    pass
+    if core_number is None:
+        core_number = nx.core_number(G)
+    k_core_nodes = set(n for n in core_number if core_number[n] >= k)
+    def filter_k_corona(v, k, core):
+        return core[v] == k and sum(1 for w in G[v] if w in k_core_nodes) == k
+    return _core_subgraph(G, filter_k_corona, k=k, core=core_number)
 
 
 @nx.utils.not_implemented_for('directed')
@@ -404,7 +456,19 @@ def k_truss(G, k):
     .. [2] Trusses: Cohesive Subgraphs for Social Network Analysis. Jonathan
        Cohen, 2005.
     """
-    pass
+    H = G.copy()
+    n_dropped = 1
+    while n_dropped > 0:
+        n_dropped = 0
+        to_drop = []
+        for u, v in H.edges():
+            n_triangles = len(set(H[u]) & set(H[v]))
+            if n_triangles < k - 2:
+                to_drop.append((u, v))
+        H.remove_edges_from(to_drop)
+        n_dropped = len(to_drop)
+        H.remove_nodes_from(list(nx.isolates(H)))
+    return H
 
 
 @nx.utils.not_implemented_for('multigraph')
@@ -458,4 +522,21 @@ def onion_layers(G):
        Physical Review X 9, 011023 (2019)
        http://doi.org/10.1103/PhysRevX.9.011023
     """
-    pass
+    if len(G) == 0:
+        return {}
+
+    core_numbers = nx.core_number(G)
+    max_core = max(core_numbers.values())
+    
+    od_layers = {}
+    layer = 1
+    for k in range(max_core + 1):
+        k_shell = nx.k_shell(G, k=k, core_number=core_numbers)
+        while k_shell:
+            min_degree_nodes = [n for n in k_shell.nodes() if k_shell.degree(n) == k]
+            for node in min_degree_nodes:
+                od_layers[node] = layer
+            k_shell.remove_nodes_from(min_degree_nodes)
+            layer += 1
+
+    return od_layers
