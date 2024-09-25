@@ -42,7 +42,10 @@ def _to_stublist(degree_sequence):
     [0, 0, 2]
 
     """
-    pass
+    stublist = []
+    for i, degree in enumerate(degree_sequence):
+        stublist.extend([i] * degree)
+    return stublist
 
 
 def _configuration_model(deg_sequence, create_using, directed=False,
@@ -78,7 +81,39 @@ def _configuration_model(deg_sequence, create_using, directed=False,
     functions.
 
     """
-    pass
+    if directed:
+        if in_deg_sequence is None:
+            raise nx.NetworkXError("in_deg_sequence must be specified for directed graphs")
+        G = nx.empty_graph(0, create_using, default=nx.MultiDiGraph)
+        n_in = len(in_deg_sequence)
+        n_out = len(deg_sequence)
+        if n_in < n_out:
+            in_deg_sequence.extend([0] * (n_out - n_in))
+        elif n_out < n_in:
+            deg_sequence.extend([0] * (n_in - n_out))
+        n = max(n_in, n_out)
+        G.add_nodes_from(range(n))
+        in_stublist = _to_stublist(in_deg_sequence)
+        out_stublist = _to_stublist(deg_sequence)
+    else:
+        G = nx.empty_graph(0, create_using, default=nx.MultiGraph)
+        n = len(deg_sequence)
+        G.add_nodes_from(range(n))
+        stublist = _to_stublist(deg_sequence)
+        in_stublist = out_stublist = stublist
+
+    if len(in_stublist) != len(out_stublist):
+        raise nx.NetworkXError("Invalid degree sequences. Sequences must have equal sums.")
+
+    rng = seed if seed is not None else nx.utils.create_random_state()
+    n = len(in_stublist)
+    while in_stublist:
+        source = out_stublist.pop()
+        target = rng.choice(in_stublist)
+        in_stublist.remove(target)
+        G.add_edge(source, target)
+
+    return G
 
 
 @py_random_state(2)
@@ -171,7 +206,10 @@ def configuration_model(deg_sequence, create_using=None, seed=None):
     >>> G.remove_edges_from(nx.selfloop_edges(G))
 
     """
-    pass
+    if sum(deg_sequence) % 2 != 0:
+        raise nx.NetworkXError("Invalid degree sequence. Sequence must have an even sum.")
+
+    return _configuration_model(deg_sequence, create_using, directed=False, seed=seed)
 
 
 @py_random_state(3)
@@ -257,7 +295,10 @@ def directed_configuration_model(in_degree_sequence, out_degree_sequence,
     >>> D.remove_edges_from(nx.selfloop_edges(D))
 
     """
-    pass
+    if sum(in_degree_sequence) != sum(out_degree_sequence):
+        raise nx.NetworkXError("Invalid degree sequences. Sequences must have equal sums.")
+
+    return _configuration_model(out_degree_sequence, create_using, directed=True, in_deg_sequence=in_degree_sequence, seed=seed)
 
 
 @py_random_state(1)
