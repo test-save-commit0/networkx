@@ -44,7 +44,10 @@ class MinHeap:
         NetworkXError
             If the heap is empty.
         """
-        pass
+        if not self._dict:
+            raise nx.NetworkXError("The heap is empty.")
+        min_item = min(self._dict.values(), key=lambda x: x.value)
+        return min_item.key, min_item.value
 
     def pop(self):
         """Delete the minimum pair in the heap.
@@ -59,7 +62,11 @@ class MinHeap:
         NetworkXError
             If the heap is empty.
         """
-        pass
+        if not self._dict:
+            raise nx.NetworkXError("The heap is empty.")
+        min_item = min(self._dict.values(), key=lambda x: x.value)
+        del self._dict[min_item.key]
+        return min_item.key, min_item.value
 
     def get(self, key, default=None):
         """Returns the value associated with a key.
@@ -78,7 +85,8 @@ class MinHeap:
         value : object.
             The value associated with the key.
         """
-        pass
+        item = self._dict.get(key)
+        return item.value if item else default
 
     def insert(self, key, value, allow_increase=False):
         """Insert a new key-value pair or modify the value in an existing
@@ -101,7 +109,14 @@ class MinHeap:
         decreased : bool
             True if a pair is inserted or the existing value is decreased.
         """
-        pass
+        if key in self._dict:
+            if allow_increase or value < self._dict[key].value:
+                self._dict[key].value = value
+                return True
+            return False
+        else:
+            self._dict[key] = self._Item(key, value)
+            return True
 
     def __nonzero__(self):
         """Returns whether the heap if empty."""
@@ -150,21 +165,138 @@ class PairingHeap(MinHeap):
         super().__init__()
         self._root = None
 
+    def decrease_key(self, key, new_value):
+        """Decrease the value associated with a key."""
+        if key not in self._dict:
+            raise KeyError(f"Key {key} not found in the heap")
+        node = self._dict[key]
+        if new_value >= node.value:
+            return False
+        self._cut(node)
+        node.value = new_value
+        if self._root:
+            self._root = self._link(self._root, node)
+        else:
+            self._root = node
+        return True
+
+    def delete(self, key):
+        """Delete a key-value pair from the heap."""
+        if key not in self._dict:
+            raise KeyError(f"Key {key} not found in the heap")
+        node = self._dict[key]
+        self._cut(node)
+        new_tree = self._merge_children(node)
+        if self._root == node:
+            self._root = new_tree
+        else:
+            if new_tree:
+                self._root = self._link(self._root, new_tree)
+        del self._dict[key]
+
+    def merge(self, other):
+        """Merge another PairingHeap into this one."""
+        if not isinstance(other, PairingHeap):
+            raise TypeError("Can only merge with another PairingHeap")
+        if other._root:
+            if self._root:
+                self._root = self._link(self._root, other._root)
+            else:
+                self._root = other._root
+            self._dict.update(other._dict)
+        other._root = None
+        other._dict.clear()
+
+    def min(self):
+        if not self._root:
+            raise nx.NetworkXError("The heap is empty.")
+        return self._root.key, self._root.value
+
+    def pop(self):
+        if not self._root:
+            raise nx.NetworkXError("The heap is empty.")
+        min_node = self._root
+        self._root = self._merge_children(self._root)
+        del self._dict[min_node.key]
+        return min_node.key, min_node.value
+
+    def insert(self, key, value, allow_increase=False):
+        if key in self._dict:
+            node = self._dict[key]
+            if allow_increase or value < node.value:
+                self._cut(node)
+                node.value = value
+                self._root = self._link(self._root, node)
+                return True
+            return False
+        else:
+            new_node = self._Node(key, value)
+            self._dict[key] = new_node
+            if self._root:
+                self._root = self._link(self._root, new_node)
+            else:
+                self._root = new_node
+            return True
+
     def _link(self, root, other):
         """Link two nodes, making the one with the smaller value the parent of
         the other.
         """
-        pass
+        if root.value <= other.value:
+            other.parent = root
+            other.prev = root.left
+            if root.left:
+                root.left.next = other
+            other.next = None
+            root.left = other
+            return root
+        else:
+            root.parent = other
+            root.prev = other.left
+            if other.left:
+                other.left.next = root
+            root.next = None
+            other.left = root
+            return other
 
     def _merge_children(self, root):
         """Merge the subtrees of the root using the standard two-pass method.
         The resulting subtree is detached from the root.
         """
-        pass
+        if not root.left:
+            return None
+        
+        # First pass: link siblings in pairs
+        current = root.left
+        next_node = None
+        first_pass = []
+        while current:
+            next_node = current.next
+            current.next = current.prev = current.parent = None
+            if next_node:
+                next_node.next = next_node.prev = next_node.parent = None
+                first_pass.append(self._link(current, next_node))
+                current = next_node.next
+            else:
+                first_pass.append(current)
+                break
+        
+        # Second pass: link the results of the first pass
+        while len(first_pass) > 1:
+            first_pass.append(self._link(first_pass.pop(0), first_pass.pop(0)))
+        
+        return first_pass[0] if first_pass else None
 
     def _cut(self, node):
         """Cut a node from its parent."""
-        pass
+        if node.parent:
+            if node.parent.left == node:
+                node.parent.left = node.next
+            if node.prev:
+                node.prev.next = node.next
+            if node.next:
+                node.next.prev = node.prev
+            node.next = node.prev = node.parent = None
 
 
 class BinaryHeap(MinHeap):
