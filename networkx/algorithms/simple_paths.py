@@ -62,7 +62,16 @@ def is_simple_path(G, nodes):
     False
 
     """
-    pass
+    # Check if the list of nodes is empty
+    if not nodes:
+        return False
+    
+    # Check if there are duplicate nodes
+    if len(set(nodes)) != len(nodes):
+        return False
+    
+    # Check if each adjacent pair of nodes is connected in the graph
+    return all(G.has_edge(nodes[i], nodes[i + 1]) for i in range(len(nodes) - 1))
 
 
 @nx._dispatchable
@@ -227,7 +236,50 @@ def all_simple_paths(G, source, target, cutoff=None):
     all_shortest_paths, shortest_path, has_path
 
     """
-    pass
+    def _all_simple_paths_graph(G, source, target, cutoff=None):
+        if source not in G:
+            raise nx.NodeNotFound(f"source node {source} not in graph")
+        if target in G:
+            targets = {target}
+        else:
+            try:
+                targets = set(target)
+            except TypeError as e:
+                raise nx.NodeNotFound(f"target node {target} not in graph") from e
+        if not targets:
+            raise nx.NodeNotFound("target is empty")
+        if cutoff is None:
+            cutoff = len(G) - 1
+        if cutoff < 1:
+            return
+        if source in targets:
+            yield [source]
+        visited = [source]
+        stack = [iter(G[source])]
+        while stack:
+            children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                stack.pop()
+                visited.pop()
+            elif len(visited) < cutoff:
+                if child in visited:
+                    continue
+                if child in targets:
+                    yield visited + [child]
+                visited.append(child)
+                if targets - set(visited):  # expand stack until find all targets
+                    stack.append(iter(G[child]))
+                else:
+                    visited.pop()  # maybe other ways to child
+            else:  # len(visited) == cutoff:
+                for target in targets - set(visited):
+                    if target in children:
+                        yield visited + [target]
+                stack.pop()
+                visited.pop()
+
+    return _all_simple_paths_graph(G, source, target, cutoff)
 
 
 @nx._dispatchable
@@ -315,12 +367,66 @@ def all_simple_edge_paths(G, source, target, cutoff=None):
     all_shortest_paths, shortest_path, all_simple_paths
 
     """
-    pass
+    def edge_key(u, v):
+        return u, v, 0 if G.is_directed() else min(u, v)
+
+    def join_edges(path):
+        return list(pairwise(path))
+
+    def join_multigraph_edges(path):
+        return [(u, v, min(G[u][v], key=lambda k: G[u][v][k]))
+                for u, v in pairwise(path)]
+
+    if G.is_multigraph():
+        join = join_multigraph_edges
+    else:
+        join = join_edges
+
+    if source not in G:
+        raise nx.NodeNotFound(f"source node {source} not in graph")
+    if target in G:
+        targets = {target}
+    else:
+        try:
+            targets = set(target)
+        except TypeError as e:
+            raise nx.NodeNotFound(f"target node {target} not in graph") from e
+    if not targets:
+        raise nx.NodeNotFound("target is empty")
+    if cutoff is None:
+        cutoff = len(G) - 1
+    if cutoff < 1:
+        return
+    if source in targets:
+        yield []
+    visited = [source]
+    stack = [iter(G[source])]
+    while stack:
+        children = stack[-1]
+        child = next(children, None)
+        if child is None:
+            stack.pop()
+            visited.pop()
+        elif len(visited) < cutoff:
+            if child not in visited:
+                if child in targets:
+                    yield join(visited + [child])
+                visited.append(child)
+                if targets - set(visited):  # expand stack until find all targets
+                    stack.append(iter(G[child]))
+                else:
+                    visited.pop()  # maybe other ways to child
+        elif len(visited) == cutoff:
+            for target in targets - set(visited):
+                if target in children:
+                    yield join(visited + [target])
+            stack.pop()
+            visited.pop()
 
 
 @not_implemented_for('multigraph')
 @nx._dispatchable(edge_attrs='weight')
-def shortest_simple_paths(G, source, target, weight=None):
+def shortest_simple_paths(G, source,target, weight=None):
     """Generate all simple paths in the graph G from source to target,
        starting from shortest ones.
 
@@ -407,7 +513,58 @@ def shortest_simple_paths(G, source, target, weight=None):
        (Jul., 1971), pp. 712-716.
 
     """
-    pass
+    if source not in G:
+        raise nx.NodeNotFound(f"source node {source} not in graph")
+    if target not in G:
+        raise nx.NodeNotFound(f"target node {target} not in graph")
+    if source == target:
+        return [[source]]
+    if G.is_multigraph():
+        raise nx.NetworkXNotImplemented("MultiGraph and MultiDiGraph not supported")
+
+    if weight is None:
+        def length_func(path):
+            return len(path) - 1
+        shortest_path_func = _bidirectional_shortest_path
+    else:
+        def length_func(path):
+            return sum(G[u][v].get(weight, 1) for (u, v) in zip(path, path[1:]))
+        shortest_path_func = _bidirectional_dijkstra
+
+    listA = list()
+    listB = PathBuffer()
+    prev_path = None
+    while True:
+        if not prev_path:
+            length, path = shortest_path_func(G, source, target, weight=weight)
+            listB.push(length, path)
+        else:
+            ignore_nodes = set()
+            ignore_edges = set()
+            for i in range(1, len(prev_path)):
+                root = prev_path[:i]
+                root_length = length_func(root)
+                for path in listA:
+                    if path[:i] == root:
+                        ignore_edges.add((path[i-1], path[i]))
+                ignore_nodes.add(root[-1])
+                try:
+                    length, spur = shortest_path_func(G, root[-1], target,
+                                                      ignore_nodes=ignore_nodes,
+                                                      ignore_edges=ignore_edges,
+                                                      weight=weight)
+                    path = root[:-1] + spur
+                    listB.push(root_length + length, path)
+                except nx.NetworkXNoPath:
+                    pass
+
+        if listB:
+            path = listB.pop()
+            yield path
+            listA.append(path)
+            prev_path = path
+        else:
+            break
 
 
 class PathBuffer:
