@@ -85,4 +85,48 @@ def random_clustered_graph(joint_degree_sequence, create_using=None, seed=None
     >>> G.remove_edges_from(nx.selfloop_edges(G))
 
     """
-    pass
+    # Check if the sum of independent edge degrees is even
+    if sum(d for d, _ in joint_degree_sequence) % 2 != 0:
+        raise nx.NetworkXError("Sum of independent edge degrees must be even.")
+    
+    # Check if the sum of triangle degrees is divisible by 3
+    if sum(t for _, t in joint_degree_sequence) % 3 != 0:
+        raise nx.NetworkXError("Sum of triangle degrees must be divisible by 3.")
+
+    # Create the graph
+    if create_using is None:
+        G = nx.MultiGraph()
+    else:
+        G = nx.empty_graph(0, create_using)
+        G.clear()
+
+    # Add nodes to the graph
+    G.add_nodes_from(range(len(joint_degree_sequence)))
+
+    # Create stubs for independent edges
+    independent_stubs = []
+    for node, (ind_deg, _) in enumerate(joint_degree_sequence):
+        independent_stubs.extend([node] * ind_deg)
+
+    # Create stubs for triangle edges
+    triangle_stubs = []
+    for node, (_, tri_deg) in enumerate(joint_degree_sequence):
+        triangle_stubs.extend([node] * tri_deg)
+
+    # Shuffle the stubs
+    seed.shuffle(independent_stubs)
+    seed.shuffle(triangle_stubs)
+
+    # Connect independent edge stubs
+    while independent_stubs:
+        u, v = independent_stubs.pop(), independent_stubs.pop()
+        G.add_edge(u, v)
+
+    # Connect triangle edge stubs
+    while triangle_stubs:
+        u, v, w = triangle_stubs.pop(), triangle_stubs.pop(), triangle_stubs.pop()
+        G.add_edge(u, v)
+        G.add_edge(v, w)
+        G.add_edge(w, u)
+
+    return G
