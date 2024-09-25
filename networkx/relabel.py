@@ -115,7 +115,23 @@ def relabel_nodes(G, mapping, copy=True):
     --------
     convert_node_labels_to_integers
     """
-    pass
+    if callable(mapping):
+        mapping = {n: mapping(n) for n in G}
+
+    if copy:
+        H = G.__class__()
+        H.add_nodes_from((mapping.get(n, n), d.copy()) for n, d in G.nodes(data=True))
+        H.add_edges_from((mapping.get(u, u), mapping.get(v, v), k, d.copy())
+                         for u, v, k, d in G.edges(keys=True, data=True))
+        return H
+    else:
+        for old, new in mapping.items():
+            if old in G:
+                G._adj[new] = G._adj.pop(old)
+                for v in G._adj[new]:
+                    G._adj[v][new] = G._adj[v].pop(old)
+        G._node = {mapping.get(n, n): d for n, d in G._node.items()}
+        return G
 
 
 @nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
@@ -155,4 +171,22 @@ def convert_node_labels_to_integers(G, first_label=0, ordering='default',
     --------
     relabel_nodes
     """
-    pass
+    N = G.number_of_nodes() + first_label
+    if ordering == "default":
+        mapping = dict(zip(G.nodes(), range(first_label, N)))
+    elif ordering == "sorted":
+        mapping = dict(zip(sorted(G.nodes()), range(first_label, N)))
+    elif ordering == "increasing degree":
+        mapping = dict(zip(sorted(G.nodes(), key=G.degree), range(first_label, N)))
+    elif ordering == "decreasing degree":
+        mapping = dict(zip(sorted(G.nodes(), key=G.degree, reverse=True), range(first_label, N)))
+    else:
+        raise nx.NetworkXError(f"Unknown ordering: {ordering}")
+
+    H = relabel_nodes(G, mapping)
+
+    # Store old labels as attributes if requested
+    if label_attribute is not None:
+        nx.set_node_attributes(H, {v: k for k, v in mapping.items()}, label_attribute)
+
+    return H
