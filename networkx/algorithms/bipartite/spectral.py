@@ -47,4 +47,27 @@ def spectral_bipartivity(G, nodes=None, weight='weight'):
     .. [1] E. Estrada and J. A. Rodríguez-Velázquez, "Spectral measures of
        bipartivity in complex networks", PhysRev E 72, 046105 (2005)
     """
-    pass
+    import numpy as np
+    from scipy import linalg
+
+    if G.number_of_nodes() == 0:
+        if nodes is None:
+            return 0
+        return {}.fromkeys(nodes, 0)
+
+    nodelist = list(G)
+    A = nx.to_numpy_array(G, nodelist=nodelist, weight=weight)
+    expA = linalg.expm(A)
+    expmA = linalg.expm(-A)
+    coshA = (expA + expmA) / 2
+
+    if nodes is None:
+        # Compute the spectral bipartivity for the entire graph
+        sb = np.sum(expmA) / np.sum(coshA)
+    else:
+        # Compute the spectral bipartivity contribution for specified nodes
+        nodes = set(nodes) & set(nodelist)
+        indices = [nodelist.index(n) for n in nodes]
+        sb = {n: expmA[i, i] / coshA[i, i] for i, n in zip(indices, nodes)}
+
+    return sb
