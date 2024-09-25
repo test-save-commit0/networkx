@@ -179,11 +179,14 @@ class GraphMatcher:
 
     def reset_recursion_limit(self):
         """Restores the recursion limit."""
-        pass
+        sys.setrecursionlimit(self.old_recursion_limit)
 
     def candidate_pairs_iter(self):
         """Iterator over candidate pairs of nodes in G1 and G2."""
-        pass
+        for n1 in self.G1_nodes:
+            for n2 in self.G2_nodes:
+                if self.G1.degree(n1) == self.G2.degree(n2):
+                    yield (n1, n2)
 
     def initialize(self):
         """Reinitializes the state of the algorithm.
@@ -192,15 +195,20 @@ class GraphMatcher:
         If only subclassing GraphMatcher, a redefinition is not necessary.
 
         """
-        pass
+        self.state = GMState(self)
 
     def is_isomorphic(self):
         """Returns True if G1 and G2 are isomorphic graphs."""
-        pass
+        try:
+            next(self.isomorphisms_iter())
+            return True
+        except StopIteration:
+            return False
 
     def isomorphisms_iter(self):
         """Generator over isomorphisms between G1 and G2."""
-        pass
+        self.initialize()
+        yield from self.match()
 
     def match(self):
         """Extends the isomorphism mapping.
@@ -211,7 +219,15 @@ class GraphMatcher:
         we yield the mapping.
 
         """
-        pass
+        if len(self.core_1) == len(self.G2):
+            yield self.core_1.copy()
+        else:
+            for G1_node, G2_node in self.candidate_pairs_iter():
+                if self.syntactic_feasibility(G1_node, G2_node):
+                    if self.semantic_feasibility(G1_node, G2_node):
+                        newstate = GMState(self, G1_node, G2_node)
+                        yield from self.match()
+                        newstate.restore()
 
     def semantic_feasibility(self, G1_node, G2_node):
         """Returns True if adding (G1_node, G2_node) is semantically feasible.
@@ -251,23 +267,35 @@ class GraphMatcher:
         the above form to keep the match() method functional. Implementations
         should consider multigraphs.
         """
-        pass
+        return True
 
     def subgraph_is_isomorphic(self):
         """Returns True if a subgraph of G1 is isomorphic to G2."""
-        pass
+        try:
+            next(self.subgraph_isomorphisms_iter())
+            return True
+        except StopIteration:
+            return False
 
     def subgraph_is_monomorphic(self):
         """Returns True if a subgraph of G1 is monomorphic to G2."""
-        pass
+        try:
+            next(self.subgraph_monomorphisms_iter())
+            return True
+        except StopIteration:
+            return False
 
     def subgraph_isomorphisms_iter(self):
         """Generator over isomorphisms between a subgraph of G1 and G2."""
-        pass
+        self.initialize()
+        self.test = 'subgraph'
+        yield from self.match()
 
     def subgraph_monomorphisms_iter(self):
         """Generator over monomorphisms between a subgraph of G1 and G2."""
-        pass
+        self.initialize()
+        self.test = 'mono'
+        yield from self.match()
 
     def syntactic_feasibility(self, G1_node, G2_node):
         """Returns True if adding (G1_node, G2_node) is syntactically feasible.
@@ -277,7 +305,26 @@ class GraphMatcher:
         The addition is allowable if the inclusion of the candidate pair does
         not make it impossible for an isomorphism/monomorphism to be found.
         """
-        pass
+        # Check if the nodes are already matched
+        if G1_node in self.core_1 or G2_node in self.core_2:
+            return False
+
+        # Check for self-loops
+        if self.G1.number_of_edges(G1_node, G1_node) != self.G2.number_of_edges(G2_node, G2_node):
+            return False
+
+        # Check for edges between existing mappings
+        for neighbor in self.G1[G1_node]:
+            if neighbor in self.core_1:
+                if not self.G2.has_edge(G2_node, self.core_1[neighbor]):
+                    return False
+
+        for neighbor in self.G2[G2_node]:
+            if neighbor in self.core_2:
+                if not self.G1.has_edge(G1_node, self.core_2[neighbor]):
+                    return False
+
+        return True
 
 
 class DiGraphMatcher(GraphMatcher):
@@ -304,7 +351,11 @@ class DiGraphMatcher(GraphMatcher):
 
     def candidate_pairs_iter(self):
         """Iterator over candidate pairs of nodes in G1 and G2."""
-        pass
+        for n1 in self.G1_nodes:
+            for n2 in self.G2_nodes:
+                if (self.G1.in_degree(n1) == self.G2.in_degree(n2) and
+                    self.G1.out_degree(n1) == self.G2.out_degree(n2)):
+                    yield (n1, n2)
 
     def initialize(self):
         """Reinitializes the state of the algorithm.
@@ -312,7 +363,7 @@ class DiGraphMatcher(GraphMatcher):
         This method should be redefined if using something other than DiGMState.
         If only subclassing GraphMatcher, a redefinition is not necessary.
         """
-        pass
+        self.state = DiGMState(self)
 
     def syntactic_feasibility(self, G1_node, G2_node):
         """Returns True if adding (G1_node, G2_node) is syntactically feasible.
@@ -322,7 +373,36 @@ class DiGraphMatcher(GraphMatcher):
         The addition is allowable if the inclusion of the candidate pair does
         not make it impossible for an isomorphism/monomorphism to be found.
         """
-        pass
+        # Check if the nodes are already matched
+        if G1_node in self.core_1 or G2_node in self.core_2:
+            return False
+
+        # Check for self-loops
+        if self.G1.number_of_edges(G1_node, G1_node) != self.G2.number_of_edges(G2_node, G2_node):
+            return False
+
+        # Check for edges between existing mappings
+        for predecessor in self.G1.predecessors(G1_node):
+            if predecessor in self.core_1:
+                if not self.G2.has_edge(self.core_1[predecessor], G2_node):
+                    return False
+
+        for successor in self.G1.successors(G1_node):
+            if successor in self.core_1:
+                if not self.G2.has_edge(G2_node, self.core_1[successor]):
+                    return False
+
+        for predecessor in self.G2.predecessors(G2_node):
+            if predecessor in self.core_2:
+                if not self.G1.has_edge(self.core_2[predecessor], G1_node):
+                    return False
+
+        for successor in self.G2.successors(G2_node):
+            if successor in self.core_2:
+                if not self.G1.has_edge(G1_node, self.core_2[successor]):
+                    return False
+
+        return True
 
 
 class GMState:
@@ -377,7 +457,21 @@ class GMState:
 
     def restore(self):
         """Deletes the GMState object and restores the class variables."""
-        pass
+        GM = self.GM
+        del GM.core_1[self.G1_node]
+        del GM.core_2[self.G2_node]
+
+        # Remove the node from inout_1 and inout_2 if it's at the current depth
+        if self.G1_node in GM.inout_1 and GM.inout_1[self.G1_node] == self.depth:
+            del GM.inout_1[self.G1_node]
+        if self.G2_node in GM.inout_2 and GM.inout_2[self.G2_node] == self.depth:
+            del GM.inout_2[self.G2_node]
+
+        # Remove any nodes from inout_1 and inout_2 that were added at this depth
+        for vector in (GM.inout_1, GM.inout_2):
+            for node in list(vector.keys()):
+                if vector[node] == self.depth:
+                    del vector[node]
 
 
 class DiGMState:
@@ -451,4 +545,20 @@ class DiGMState:
 
     def restore(self):
         """Deletes the DiGMState object and restores the class variables."""
-        pass
+        GM = self.GM
+        del GM.core_1[self.G1_node]
+        del GM.core_2[self.G2_node]
+
+        # Remove the node from in_1, in_2, out_1, and out_2 if it's at the current depth
+        for vector in (GM.in_1, GM.out_1):
+            if self.G1_node in vector and vector[self.G1_node] == self.depth:
+                del vector[self.G1_node]
+        for vector in (GM.in_2, GM.out_2):
+            if self.G2_node in vector and vector[self.G2_node] == self.depth:
+                del vector[self.G2_node]
+
+        # Remove any nodes from in_1, in_2, out_1, and out_2 that were added at this depth
+        for vector in (GM.in_1, GM.out_1, GM.in_2, GM.out_2):
+            for node in list(vector.keys()):
+                if vector[node] == self.depth:
+                    del vector[node]
