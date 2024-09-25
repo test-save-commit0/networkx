@@ -57,7 +57,27 @@ def full_rary_tree(r, n, create_using=None):
     .. [1] An introduction to data structures and algorithms,
            James Andrew Storer,  Birkhauser Boston 2001, (page 225).
     """
-    pass
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+
+    if n == 0:
+        return G
+
+    if r == 1:
+        G.add_edges_from([(i, i + 1) for i in range(n - 1)])
+        return G
+
+    # Add nodes
+    G.add_nodes_from(range(n))
+
+    # Add edges
+    for i in range(1, n):
+        parent = (i - 1) // r
+        G.add_edge(parent, i)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -89,7 +109,17 @@ def kneser_graph(n, k):
     >>> nx.is_isomorphic(G, nx.petersen_graph())
     True
     """
-    pass
+    import itertools
+
+    G = nx.Graph()
+    nodes = list(itertools.combinations(range(n), k))
+    G.add_nodes_from(nodes)
+
+    for u, v in itertools.combinations(nodes, 2):
+        if not set(u) & set(v):  # Check if sets are disjoint
+            G.add_edge(u, v)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -128,7 +158,25 @@ def balanced_tree(r, h, create_using=None):
     A balanced tree is also known as a *complete r-ary tree*.
 
     """
-    pass
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+
+    if r == 1:
+        G.add_edges_from([(i, i + 1) for i in range(h)])
+        return G
+
+    # Total number of nodes in the tree
+    n = sum(r**i for i in range(h + 1))
+    G.add_nodes_from(range(n))
+
+    # Add edges
+    for i in range(1, n):
+        parent = (i - 1) // r
+        G.add_edge(parent, i)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -176,7 +224,38 @@ def barbell_graph(m1, m2, create_using=None):
     and Jim Fill's e-text on Random Walks on Graphs.
 
     """
-    pass
+    if m1 < 2:
+        raise nx.NetworkXError("Invalid graph description, m1 should be >=2")
+    if m2 < 0:
+        raise nx.NetworkXError("Invalid graph description, m2 should be >=0")
+
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+
+    # Add m1 nodes for the left barbell
+    G.add_edges_from((u, v) for u in range(m1) for v in range(u + 1, m1))
+
+    # Add m2 nodes for the path
+    if m2 > 0:
+        G.add_edges_from((u, u + 1) for u in range(m1, m1 + m2 - 1))
+        # Connect the left barbell to the path
+        G.add_edge(m1 - 1, m1)
+
+    # Add m1 nodes for the right barbell
+    G.add_edges_from(
+        (u, v) for u in range(m1 + m2, 2 * m1 + m2) for v in range(u + 1, 2 * m1 + m2)
+    )
+
+    # Connect the path to the right barbell
+    if m2 > 0:
+        G.add_edge(m1 + m2 - 1, m1 + m2)
+    else:
+        # If m2=0, connect the two barbells directly
+        G.add_edge(m1 - 1, m1)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -205,7 +284,29 @@ def binomial_tree(n, create_using=None):
         A binomial tree of $2^n$ nodes and $2^n - 1$ edges.
 
     """
-    pass
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+
+    if n < 0:
+        raise nx.NetworkXError("Invalid order for binomial tree")
+
+    # Start with a single node for n=0
+    G.add_node(0)
+
+    for k in range(1, n + 1):
+        # Create a copy of the current graph
+        H = G.copy()
+        # Relabel nodes in H to start from 2^(k-1)
+        mapping = {node: node + 2**(k-1) for node in H}
+        H = nx.relabel_nodes(H, mapping)
+        # Add edges to connect G and H
+        G.add_edges_from((0, node) for node in H)
+        # Combine G and H
+        G = nx.union(G, H)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
