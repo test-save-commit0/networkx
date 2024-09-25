@@ -62,4 +62,32 @@ def number_of_walks(G, walk_length):
     1
 
     """
-    pass
+    if walk_length < 0:
+        raise ValueError("walk_length must be non-negative")
+    
+    if walk_length == 0:
+        return {n: {n: 1 for n in G} for n in G}
+    
+    # Initialize the result dictionary
+    result = {n: {m: 0 for m in G} for n in G}
+    
+    # For walk_length = 1, the result is the adjacency matrix
+    if walk_length == 1:
+        for u, v in G.edges():
+            result[u][v] += 1
+            result[v][u] += 1
+        return result
+    
+    # For walk_length > 1, use matrix multiplication
+    adj_matrix = nx.to_numpy_array(G)
+    walk_matrix = adj_matrix
+    
+    for _ in range(walk_length - 1):
+        walk_matrix = walk_matrix @ adj_matrix
+    
+    # Convert the result back to the dictionary format
+    for i, u in enumerate(G.nodes()):
+        for j, v in enumerate(G.nodes()):
+            result[u][v] = int(walk_matrix[i, j])
+    
+    return result
