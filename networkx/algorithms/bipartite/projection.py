@@ -80,7 +80,25 @@ def projected_graph(B, nodes, multigraph=False):
     overlap_weighted_projected_graph,
     generic_weighted_projected_graph
     """
-    pass
+    if multigraph:
+        G = nx.MultiGraph()
+    else:
+        G = nx.Graph()
+    
+    G.graph.update(B.graph)
+    G.add_nodes_from((n, B.nodes[n]) for n in nodes if n in B)
+    
+    for u in nodes:
+        for v in nodes:
+            if u != v:
+                shared_neighbors = set(B[u]) & set(B[v])
+                if shared_neighbors:
+                    if multigraph:
+                        G.add_edges_from((u, v, neighbor) for neighbor in shared_neighbors)
+                    else:
+                        G.add_edge(u, v)
+    
+    return G
 
 
 @not_implemented_for('multigraph')
@@ -154,7 +172,28 @@ def weighted_projected_graph(B, nodes, ratio=False):
         Networks". In Carrington, P. and Scott, J. (eds) The Sage Handbook
         of Social Network Analysis. Sage Publications.
     """
-    pass
+    if len(nodes) >= len(B):
+        raise NetworkXAlgorithmError("Cannot project to a graph with more nodes than the original graph")
+
+    G = nx.Graph()
+    G.graph.update(B.graph)
+    G.add_nodes_from((n, B.nodes[n]) for n in nodes if n in B)
+
+    other_nodes = set(B) - set(nodes)
+    max_possible_shared = len(other_nodes)
+
+    for u in nodes:
+        for v in nodes:
+            if u != v:
+                shared_neighbors = set(B[u]) & set(B[v])
+                if shared_neighbors:
+                    if ratio:
+                        weight = len(shared_neighbors) / max_possible_shared
+                    else:
+                        weight = len(shared_neighbors)
+                    G.add_edge(u, v, weight=weight)
+
+    return G
 
 
 @not_implemented_for('multigraph')
@@ -232,7 +271,20 @@ def collaboration_weighted_projected_graph(B, nodes):
         Shortest paths, weighted networks, and centrality,
         M. E. J. Newman, Phys. Rev. E 64, 016132 (2001).
     """
-    pass
+    G = nx.Graph()
+    G.graph.update(B.graph)
+    G.add_nodes_from((n, B.nodes[n]) for n in nodes if n in B)
+
+    for u in nodes:
+        for v in nodes:
+            if u != v:
+                weight = 0
+                for k in set(B[u]) & set(B[v]):
+                    weight += 1 / (B.degree(k) - 1) if B.degree(k) > 1 else 0
+                if weight != 0:
+                    G.add_edge(u, v, weight=weight)
+
+    return G
 
 
 @not_implemented_for('multigraph')
@@ -314,7 +366,24 @@ def overlap_weighted_projected_graph(B, nodes, jaccard=True):
         of Social Network Analysis. Sage Publications.
 
     """
-    pass
+    G = nx.Graph()
+    G.graph.update(B.graph)
+    G.add_nodes_from((n, B.nodes[n]) for n in nodes if n in B)
+
+    for u in nodes:
+        for v in nodes:
+            if u != v:
+                u_nbrs = set(B[u])
+                v_nbrs = set(B[v])
+                common_nbrs = u_nbrs & v_nbrs
+                if common_nbrs:
+                    if jaccard:
+                        weight = len(common_nbrs) / len(u_nbrs | v_nbrs)
+                    else:
+                        weight = len(common_nbrs) / min(len(u_nbrs), len(v_nbrs))
+                    G.add_edge(u, v, weight=weight)
+
+    return G
 
 
 @not_implemented_for('multigraph')
@@ -403,4 +472,19 @@ def generic_weighted_projected_graph(B, nodes, weight_function=None):
     projected_graph
 
     """
-    pass
+    if weight_function is None:
+        def weight_function(G, u, v):
+            return len(set(G[u]) & set(G[v]))
+
+    G = nx.Graph()
+    G.graph.update(B.graph)
+    G.add_nodes_from((n, B.nodes[n]) for n in nodes if n in B)
+
+    for u in nodes:
+        for v in nodes:
+            if u != v:
+                weight = weight_function(B, u, v)
+                if weight != 0:
+                    G.add_edge(u, v, weight=weight)
+
+    return G
