@@ -60,7 +60,28 @@ def partial_duplication_graph(N, n, p, q, seed=None):
            <https://doi.org/10.1155/2008/190836>
 
     """
-    pass
+    if not 0 <= p <= 1 or not 0 <= q <= 1:
+        raise NetworkXError("p and q must be probabilities in [0, 1]")
+    if n < 1 or N < n:
+        raise NetworkXError("n must be at least 1 and N must be at least n")
+
+    G = nx.complete_graph(n)
+    for i in range(n, N):
+        # Pick a random node
+        u = seed.choice(list(G.nodes()))
+        # Create a new node
+        v = i
+        # Add edges from v to u's neighbors with probability p
+        for neighbor in G.neighbors(u):
+            if seed.random() < p:
+                G.add_edge(v, neighbor)
+        # Add edge from u to v with probability q
+        if seed.random() < q:
+            G.add_edge(u, v)
+        # Add the new node to the graph
+        G.add_node(v)
+
+    return G
 
 
 @py_random_state(2)
@@ -106,4 +127,27 @@ def duplication_divergence_graph(n, p, seed=None):
        Phys. Rev. E, 71, 061911, 2005.
 
     """
-    pass
+    if not 0 <= p <= 1:
+        raise NetworkXError("p must be a probability in [0, 1]")
+    if n < 2:
+        raise NetworkXError("n must be at least 2")
+
+    G = nx.Graph()
+    G.add_edge(0, 1)  # Start with two connected nodes
+
+    for new_node in range(2, n):
+        # Choose random node to duplicate
+        target_node = seed.choice(list(G.nodes()))
+        
+        # Add new node
+        G.add_node(new_node)
+        
+        # Connect to target's neighbors with probability p
+        for neighbor in G.neighbors(target_node):
+            if seed.random() < p:
+                G.add_edge(new_node, neighbor)
+        
+        # Always connect to the target node to ensure connectivity
+        G.add_edge(new_node, target_node)
+
+    return G
