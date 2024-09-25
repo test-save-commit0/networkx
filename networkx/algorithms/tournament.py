@@ -40,7 +40,12 @@ def index_satisfying(iterable, condition):
     function raises :exc:`ValueError`.
 
     """
-    pass
+    if not iterable:
+        raise ValueError("iterable must not be empty")
+    for i, item in enumerate(iterable):
+        if condition(item):
+            return i
+    return len(iterable)
 
 
 @not_implemented_for('undirected')
@@ -75,7 +80,20 @@ def is_tournament(G):
     the convention used here.
 
     """
-    pass
+    if not G.is_directed() or G.number_of_selfloops() > 0:
+        return False
+    
+    n = G.number_of_nodes()
+    expected_edges = n * (n - 1) // 2
+    
+    if G.number_of_edges() != expected_edges:
+        return False
+    
+    for u, v in combinations(G.nodes(), 2):
+        if not (G.has_edge(u, v) ^ G.has_edge(v, u)):
+            return False
+    
+    return True
 
 
 @not_implemented_for('undirected')
@@ -113,7 +131,26 @@ def hamiltonian_path(G):
     $n$ is the number of nodes in the graph.
 
     """
-    pass
+    def hamiltonian_path_recursive(nodes):
+        if len(nodes) == 1:
+            return nodes
+        
+        v = arbitrary_element(nodes)
+        nodes.remove(v)
+        
+        predecessors = [u for u in nodes if G.has_edge(u, v)]
+        successors = [w for w in nodes if G.has_edge(v, w)]
+        
+        if not predecessors:
+            return [v] + hamiltonian_path_recursive(nodes)
+        elif not successors:
+            return hamiltonian_path_recursive(nodes) + [v]
+        else:
+            return (hamiltonian_path_recursive(predecessors) + 
+                    [v] + 
+                    hamiltonian_path_recursive(successors))
+    
+    return hamiltonian_path_recursive(list(G.nodes()))
 
 
 @py_random_state(1)
@@ -143,7 +180,16 @@ def random_tournament(n, seed=None):
     graph.
 
     """
-    pass
+    G = nx.DiGraph()
+    G.add_nodes_from(range(n))
+    
+    for u, v in combinations(range(n), 2):
+        if seed.random() < 0.5:
+            G.add_edge(u, v)
+        else:
+            G.add_edge(v, u)
+    
+    return G
 
 
 @not_implemented_for('undirected')
@@ -174,7 +220,7 @@ def score_sequence(G):
     [1, 1, 2, 2]
 
     """
-    pass
+    return sorted(dict(G.out_degree()).values())
 
 
 @not_implemented_for('undirected')
@@ -216,7 +262,14 @@ def tournament_matrix(G):
         If SciPy is not available.
 
     """
-    pass
+    try:
+        from scipy import sparse
+    except ImportError:
+        raise ImportError("SciPy is not available.")
+
+    A = nx.adjacency_matrix(G)
+    T = A - A.T
+    return T
 
 
 @not_implemented_for('undirected')
@@ -276,7 +329,15 @@ def is_reachable(G, s, t):
            *Electronic Colloquium on Computational Complexity*. 2001.
            <http://eccc.hpi-web.de/report/2001/092/>
     """
-    pass
+    if s == t:
+        return True
+    
+    if G.has_edge(s, t):
+        return True
+    
+    middle = set(G.successors(s)) & set(G.predecessors(t))
+    
+    return any(is_reachable(G, s, m) and is_reachable(G, m, t) for m in middle)
 
 
 @not_implemented_for('undirected')
@@ -334,4 +395,8 @@ def is_strongly_connected(G):
            <http://eccc.hpi-web.de/report/2001/092/>
 
     """
-    pass
+    if len(G) <= 1:
+        return True
+    
+    start_node = arbitrary_element(G)
+    return all(is_reachable(G, start_node, node) for node in G if node != start_node)
