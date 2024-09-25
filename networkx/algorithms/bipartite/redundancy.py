@@ -80,7 +80,14 @@ def node_redundancy(G, nodes=None):
        Social Networks 30(1), 31--48.
 
     """
-    pass
+    if nodes is None:
+        nodes = G.nodes()
+    
+    redundancy = {}
+    for v in nodes:
+        redundancy[v] = _node_redundancy(G, v)
+    
+    return redundancy
 
 
 def _node_redundancy(G, v):
