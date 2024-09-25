@@ -54,7 +54,18 @@ def descendants(G, source):
     --------
     ancestors
     """
-    pass
+    if source not in G:
+        raise nx.NetworkXError(f"The node {source} is not in the graph.")
+    
+    descendants = set()
+    stack = [source]
+    while stack:
+        node = stack.pop()
+        for successor in G.successors(node):
+            if successor not in descendants:
+                descendants.add(successor)
+                stack.append(successor)
+    return descendants
 
 
 @nx._dispatchable
@@ -91,13 +102,46 @@ def ancestors(G, source):
     --------
     descendants
     """
-    pass
+    if source not in G:
+        raise nx.NetworkXError(f"The node {source} is not in the graph.")
+    
+    ancestors = set()
+    stack = [source]
+    while stack:
+        node = stack.pop()
+        for predecessor in G.predecessors(node):
+            if predecessor not in ancestors:
+                ancestors.add(predecessor)
+                stack.append(predecessor)
+    return ancestors
 
 
 @nx._dispatchable
 def has_cycle(G):
     """Decides whether the directed graph has a cycle."""
-    pass
+    def dfs(node, visited, stack):
+        visited.add(node)
+        stack.add(node)
+        
+        for neighbor in G.successors(node):
+            if neighbor not in visited:
+                if dfs(neighbor, visited, stack):
+                    return True
+            elif neighbor in stack:
+                return True
+        
+        stack.remove(node)
+        return False
+
+    visited = set()
+    stack = set()
+    
+    for node in G:
+        if node not in visited:
+            if dfs(node, visited, stack):
+                return True
+    
+    return False
 
 
 @nx._dispatchable
@@ -138,7 +182,9 @@ def is_directed_acyclic_graph(G):
     --------
     topological_sort
     """
-    pass
+    if not G.is_directed():
+        return False
+    return not has_cycle(G)
 
 
 @nx._dispatchable
