@@ -49,7 +49,16 @@ def is_eulerian(G):
 
 
     """
-    pass
+    if G.number_of_nodes() == 0:
+        return True
+    if G.is_directed():
+        # For directed graphs, check if in_degree == out_degree for all nodes
+        return (G.is_strongly_connected() and
+                all(G.in_degree(n) == G.out_degree(n) for n in G))
+    else:
+        # For undirected graphs, check if all degrees are even
+        return (nx.is_connected(G) and
+                all(d % 2 == 0 for v, d in G.degree()))
 
 
 @nx._dispatchable
@@ -63,7 +72,20 @@ def is_semieulerian(G):
     has_eulerian_path
     is_eulerian
     """
-    pass
+    if G.number_of_nodes() == 0:
+        return False
+    if G.is_directed():
+        # For directed graphs, check if there's exactly one node with out_degree - in_degree = 1
+        # and exactly one node with in_degree - out_degree = 1
+        degree_diff = [G.out_degree(n) - G.in_degree(n) for n in G]
+        return (G.is_strongly_connected() and
+                degree_diff.count(1) == 1 and
+                degree_diff.count(-1) == 1 and
+                all(d == 0 for d in degree_diff if d not in {-1, 0, 1}))
+    else:
+        # For undirected graphs, check if there are exactly two nodes with odd degree
+        odd_degree_count = sum(1 for v, d in G.degree() if d % 2 != 0)
+        return nx.is_connected(G) and odd_degree_count == 2
 
 
 def _find_path_start(G):
@@ -71,7 +93,18 @@ def _find_path_start(G):
 
     If no path exists, return None.
     """
-    pass
+    if G.is_directed():
+        for v in G:
+            if G.out_degree(v) - G.in_degree(v) == 1:
+                return v
+        # If no suitable start found, return an arbitrary node
+        return next(iter(G))
+    else:
+        for v in G:
+            if G.degree(v) % 2 != 0:
+                return v
+        # If all degrees are even, return an arbitrary node
+        return next(iter(G))
 
 
 @nx._dispatchable
@@ -137,7 +170,51 @@ def eulerian_circuit(G, source=None, keys=False):
         [0, 2, 1]
 
     """
-    pass
+    if not is_eulerian(G):
+        raise nx.NetworkXError("Graph is not Eulerian.")
+    
+    if G.number_of_edges() == 0:
+        return []
+
+    if source is None:
+        source = arbitrary_element(G)
+
+    if G.is_multigraph():
+        G_iter = G.edges
+    else:
+        G_iter = G.edges
+
+    def get_unused_edge(v):
+        for u, w, k in G_iter(v):
+            if not used[v][w].get(k, False):
+                used[v][w][k] = True
+                return w, k
+        return None, None
+
+    used = {v: {w: {} for w in G[v]} for v in G}
+    vertex_stack = [source]
+    last_vertex = None
+    while vertex_stack:
+        current_vertex = vertex_stack[-1]
+        if current_vertex != last_vertex:
+            last_vertex = current_vertex
+            next_vertex, key = get_unused_edge(current_vertex)
+            if next_vertex is not None:
+                vertex_stack.append(next_vertex)
+                if keys and G.is_multigraph():
+                    yield (current_vertex, next_vertex, key)
+                else:
+                    yield (current_vertex, next_vertex)
+            else:
+                if len(vertex_stack) > 1:
+                    last_vertex = vertex_stack.pop()
+                    yield (vertex_stack[-1], last_vertex)
+                else:
+                    last_vertex = vertex_stack.pop()
+        else:
+            last_vertex = vertex_stack.pop()
+            if len(vertex_stack) > 0:
+                yield (vertex_stack[-1], last_vertex)
 
 
 @nx._dispatchable
@@ -203,7 +280,35 @@ def has_eulerian_path(G, source=None):
     is_eulerian
     eulerian_path
     """
-    pass
+    if G.number_of_nodes() == 0:
+        return True
+    
+    if G.is_directed():
+        if not nx.is_strongly_connected(G):
+            return False
+        
+        in_degree = dict(G.in_degree())
+        out_degree = dict(G.out_degree())
+        diff = {v: out_degree[v] - in_degree[v] for v in G}
+        
+        if source is not None:
+            if diff[source] > 1 or any(d > 0 for v, d in diff.items() if v != source):
+                return False
+        else:
+            if sum(1 for d in diff.values() if d > 0) > 1 or sum(1 for d in diff.values() if d < 0) > 1:
+                return False
+        
+        return all(abs(d) <= 1 for d in diff.values())
+    else:
+        if not nx.is_connected(G):
+            return False
+        
+        odd_degree_count = sum(1 for v, d in G.degree() if d % 2 != 0)
+        
+        if source is not None:
+            return odd_degree_count == 0 or (odd_degree_count == 2 and G.degree(source) % 2 != 0)
+        else:
+            return odd_degree_count in (0, 2)
 
 
 @nx._dispatchable
@@ -228,7 +333,49 @@ def eulerian_path(G, source=None, keys=False):
     Warning: If `source` provided is not the start node of an Euler path
     will raise error even if an Euler Path exists.
     """
-    pass
+    if not has_eulerian_path(G, source):
+        raise nx.NetworkXError("Graph has no Eulerian path.")
+
+    if source is None:
+        source = _find_path_start(G)
+
+    if G.is_multigraph():
+        G_iter = G.edges
+    else:
+        G_iter = G.edges
+
+    def get_unused_edge(v):
+        for u, w, k in G_iter(v):
+            if not used[v][w].get(k, False):
+                used[v][w][k] = True
+                return w, k
+        return None, None
+
+    used = {v: {w: {} for w in G[v]} for v in G}
+    vertex_stack = [source]
+    last_vertex = None
+
+    while vertex_stack:
+        current_vertex = vertex_stack[-1]
+        if current_vertex != last_vertex:
+            last_vertex = current_vertex
+            next_vertex, key = get_unused_edge(current_vertex)
+            if next_vertex is not None:
+                vertex_stack.append(next_vertex)
+                if keys and G.is_multigraph():
+                    yield (current_vertex, next_vertex, key)
+                else:
+                    yield (current_vertex, next_vertex)
+            else:
+                if len(vertex_stack) > 1:
+                    last_vertex = vertex_stack.pop()
+                    yield (vertex_stack[-1], last_vertex)
+                else:
+                    last_vertex = vertex_stack.pop()
+        else:
+            last_vertex = vertex_stack.pop()
+            if len(vertex_stack) > 0:
+                yield (vertex_stack[-1], last_vertex)
 
 
 @not_implemented_for('directed')
@@ -274,4 +421,28 @@ def eulerize(G):
         True
 
     """
-    pass
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Graph is not connected.")
+
+    if is_eulerian(G):
+        return nx.MultiGraph(G)
+
+    odd_degree_vertices = [v for v, d in G.degree() if d % 2 != 0]
+    G_multi = nx.MultiGraph(G)
+
+    if len(odd_degree_vertices) == 0:
+        return G_multi
+
+    # Find minimum weight matching
+    odd_G = nx.Graph()
+    for u, v in combinations(odd_degree_vertices, 2):
+        odd_G.add_edge(u, v, weight=nx.shortest_path_length(G, u, v, weight="weight"))
+
+    matching = nx.min_weight_matching(odd_G)
+
+    # Add matched edges to the graph
+    for u, v in matching:
+        path = nx.shortest_path(G, u, v, weight="weight")
+        nx.add_path(G_multi, path)
+
+    return G_multi
