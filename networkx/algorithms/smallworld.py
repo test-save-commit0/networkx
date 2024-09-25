@@ -62,7 +62,35 @@ def random_reference(G, niter=1, connectivity=True, seed=None):
            "Specificity and stability in topology of protein networks."
            Science 296.5569 (2002): 910-913.
     """
-    pass
+    import random
+
+    if len(G) < 4:
+        raise nx.NetworkXError("Graph has fewer than four nodes.")
+    if G.number_of_edges() < 2:
+        raise nx.NetworkXError("Graph has fewer than two edges.")
+
+    G = G.copy()
+    edges = list(G.edges())
+    nodes = list(G.nodes())
+    nswap = int(round(len(edges) * niter))
+
+    for _ in range(nswap):
+        (u1, v1), (u2, v2) = random.sample(edges, 2)
+        
+        if len(set([u1, v1, u2, v2])) < 4:
+            continue
+        
+        if not connectivity or (nx.has_path(G, u1, u2) and nx.has_path(G, v1, v2)):
+            G.remove_edge(u1, v1)
+            G.remove_edge(u2, v2)
+            G.add_edge(u1, v2)
+            G.add_edge(u2, v1)
+            edges.remove((u1, v1))
+            edges.remove((u2, v2))
+            edges.append((u1, v2))
+            edges.append((u2, v1))
+
+    return G
 
 
 @not_implemented_for('directed')
@@ -114,7 +142,45 @@ def lattice_reference(G, niter=5, D=None, connectivity=True, seed=None):
        "Specificity and stability in topology of protein networks."
        Science 296.5569 (2002): 910-913.
     """
-    pass
+    import random
+    import numpy as np
+
+    if len(G) < 4:
+        raise nx.NetworkXError("Graph has fewer than four nodes.")
+    if G.number_of_edges() < 2:
+        raise nx.NetworkXError("Graph has fewer than two edges.")
+
+    G = G.copy()
+    n = len(G)
+    edges = list(G.edges())
+    num_edges = len(edges)
+
+    if D is None:
+        D = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                D[i, j] = D[j, i] = abs(i - j)
+
+    nswap = int(round(num_edges * niter))
+
+    for _ in range(nswap):
+        (u1, v1), (u2, v2) = random.sample(edges, 2)
+        
+        if len(set([u1, v1, u2, v2])) < 4:
+            continue
+        
+        if D[u1, v2] + D[u2, v1] < D[u1, v1] + D[u2, v2]:
+            if not connectivity or (nx.has_path(G, u1, u2) and nx.has_path(G, v1, v2)):
+                G.remove_edge(u1, v1)
+                G.remove_edge(u2, v2)
+                G.add_edge(u1, v2)
+                G.add_edge(u2, v1)
+                edges.remove((u1, v1))
+                edges.remove((u2, v2))
+                edges.append((u1, v2))
+                edges.append((u2, v1))
+
+    return G
 
 
 @not_implemented_for('directed')
@@ -166,7 +232,28 @@ def sigma(G, niter=100, nrand=10, seed=None):
            Canonical Network Equivalence".
            PLoS One. 3 (4). PMID 18446219. doi:10.1371/journal.pone.0002051.
     """
-    pass
+    import numpy as np
+
+    # Compute clustering coefficient and average shortest path length for G
+    C = nx.average_clustering(G)
+    L = nx.average_shortest_path_length(G)
+
+    # Generate random graphs and compute their properties
+    Cr_list = []
+    Lr_list = []
+    for _ in range(nrand):
+        G_rand = random_reference(G, niter=niter, seed=seed)
+        Cr_list.append(nx.average_clustering(G_rand))
+        Lr_list.append(nx.average_shortest_path_length(G_rand))
+
+    # Compute average Cr and Lr
+    Cr = np.mean(Cr_list)
+    Lr = np.mean(Lr_list)
+
+    # Compute sigma
+    sigma = (C / Cr) / (L / Lr)
+
+    return sigma
 
 
 @not_implemented_for('directed')
@@ -224,4 +311,26 @@ def omega(G, niter=5, nrand=10, seed=None):
            Brain Connectivity. 1 (0038): 367-75.  PMC 3604768. PMID 22432451.
            doi:10.1089/brain.2011.0038.
     """
-    pass
+    import numpy as np
+
+    # Compute clustering coefficient and average shortest path length for G
+    C = nx.average_clustering(G)
+    L = nx.average_shortest_path_length(G)
+
+    # Generate random graphs and compute their properties
+    Lr_list = []
+    for _ in range(nrand):
+        G_rand = random_reference(G, niter=niter, seed=seed)
+        Lr_list.append(nx.average_shortest_path_length(G_rand))
+
+    # Compute average Lr
+    Lr = np.mean(Lr_list)
+
+    # Generate lattice graph and compute its clustering coefficient
+    G_lat = lattice_reference(G, niter=niter, seed=seed)
+    Cl = nx.average_clustering(G_lat)
+
+    # Compute omega
+    omega = Lr / L - C / Cl
+
+    return omega
