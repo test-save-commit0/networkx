@@ -63,7 +63,18 @@ def random_layout(G, center=None, dim=2, seed=None):
     >>> pos = nx.random_layout(G)
 
     """
-    pass
+    import numpy as np
+
+    if not isinstance(G, nx.Graph):
+        G = nx.Graph(G)
+
+    n = len(G)
+    pos = seed.rand(n, dim)
+
+    if center is not None:
+        pos += np.asarray(center) - 0.5
+
+    return dict(zip(G, pos))
 
 
 def circular_layout(G, scale=1, center=None, dim=2):
@@ -107,7 +118,32 @@ def circular_layout(G, scale=1, center=None, dim=2):
     try to minimize edge crossings.
 
     """
-    pass
+    import numpy as np
+
+    if dim < 2:
+        raise ValueError("Cannot create circular layout with dim < 2")
+
+    if not isinstance(G, nx.Graph):
+        G = nx.Graph(G)
+
+    n = len(G)
+    if n == 0:
+        return {}
+    if n == 1:
+        return {list(G)[0]: np.array([0, 0])}
+
+    theta = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    pos = np.column_stack([np.cos(theta), np.sin(theta)])
+
+    if dim > 2:
+        pos = np.pad(pos, ((0, 0), (0, dim - 2)), mode='constant')
+
+    pos *= scale
+
+    if center is not None:
+        pos += np.asarray(center)
+
+    return dict(zip(G, pos))
 
 
 def shell_layout(G, nlist=None, rotate=None, scale=1, center=None, dim=2):
@@ -158,7 +194,37 @@ def shell_layout(G, nlist=None, rotate=None, scale=1, center=None, dim=2):
     try to minimize edge crossings.
 
     """
-    pass
+    import numpy as np
+
+    if dim != 2:
+        raise ValueError("shell_layout: dim must be 2")
+
+    if not isinstance(G, nx.Graph):
+        G = nx.Graph(G)
+
+    if nlist is None:
+        nlist = [list(G)]
+
+    if rotate is None:
+        rotate = np.pi / len(nlist)
+
+    if len(G) == 0:
+        return {}
+
+    pos = {}
+    for i, nodes in enumerate(nlist):
+        r = (i + 1) / len(nlist)
+        theta = np.linspace(0, 2 * np.pi, len(nodes) + 1)[:-1] + i * rotate
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        pos.update(zip(nodes, zip(x, y)))
+
+    pos_arr = np.array(list(pos.values()))
+    pos_arr *= scale
+    if center is not None:
+        pos_arr += np.asarray(center)
+
+    return {node: pos for node, pos in zip(pos.keys(), pos_arr)}
 
 
 def bipartite_layout(G, nodes, align='vertical', scale=1, center=None,
