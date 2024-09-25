@@ -95,4 +95,38 @@ def second_order_centrality(G, weight='weight'):
        "Second order centrality: Distributed assessment of nodes criticity in
        complex networks", Elsevier Computer Communications 34(5):619-628, 2011.
     """
-    pass
+    import numpy as np
+    from networkx.exception import NetworkXException
+
+    if len(G) == 0:
+        raise NetworkXException("Empty graph.")
+
+    if not nx.is_connected(G):
+        raise NetworkXException("Graph is not connected.")
+
+    # Create adjacency matrix with self-loops to ensure equal in-degree
+    A = nx.to_numpy_array(G, weight=weight)
+    n = A.shape[0]
+    A += np.diag(np.sum(A, axis=0))
+
+    # Check for negative weights
+    if np.any(A < 0):
+        raise NetworkXException("Graph has negative weights.")
+
+    # Compute transition probability matrix
+    P = A / np.sum(A, axis=0)
+
+    # Compute fundamental matrix
+    I = np.eye(n)
+    Z = np.linalg.inv(I - P + np.ones((n, n)) / n)
+
+    # Compute diagonal elements of the fundamental matrix
+    d = np.diag(Z)
+
+    # Compute second order centrality
+    soc = {}
+    for i, node in enumerate(G.nodes()):
+        variance = 2 * (Z[i, i] - np.sum(Z[i, :]) / n)
+        soc[node] = np.sqrt(variance)
+
+    return soc
