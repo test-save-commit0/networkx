@@ -63,7 +63,28 @@ def enumerate_all_cliques(G):
            <https://doi.org/10.1109/SC.2005.29>.
 
     """
-    pass
+    def expand_clique(candidates, nays):
+        if not candidates and not nays:
+            yield []
+        else:
+            for v in candidates:
+                new_candidates = [u for u in candidates if u in G[v]]
+                new_nays = [u for u in nays if u in G[v]]
+                for c in expand_clique(new_candidates, new_nays):
+                    yield [v] + c
+                candidates.remove(v)
+                nays.append(v)
+
+    # Yield single node cliques
+    for v in G:
+        yield [v]
+
+    # Yield cliques of size 2 and above
+    candidates = list(G)
+    nays = []
+    for clique in expand_clique(candidates, nays):
+        if len(clique) > 1:
+            yield clique
 
 
 @not_implemented_for('directed')
@@ -212,7 +233,33 @@ def find_cliques(G, nodes=None):
        <https://doi.org/10.1016/j.tcs.2008.05.010>
 
     """
-    pass
+    if nodes is not None:
+        if not all(n in G for n in nodes):
+            raise ValueError("nodes must be in G")
+        if not all(G.has_edge(u, v) for u, v in combinations(nodes, 2)):
+            raise ValueError("nodes is not a clique")
+        cliques = [set(nodes)]
+        adj = {n: set(G[n]) for n in G}
+        candidates = set(G) - set(nodes)
+    else:
+        cliques = []
+        adj = {n: set(G[n]) for n in G}
+        candidates = set(G)
+
+    while candidates:
+        pivot = max(candidates, key=lambda x: len(adj[x] & candidates))
+        pivot_neighbors = adj[pivot] & candidates
+        for v in candidates - pivot_neighbors:
+            new_clique = [v]
+            new_candidates = candidates & adj[v]
+            while new_candidates:
+                u = new_candidates.pop()
+                new_clique.append(u)
+                new_candidates &= adj[u]
+            cliques.append(set(new_clique))
+            candidates.remove(v)
+
+    return [list(c) for c in cliques]
 
 
 @nx._dispatchable
@@ -297,7 +344,33 @@ def find_cliques_recursive(G, nodes=None):
        <https://doi.org/10.1016/j.tcs.2008.05.010>
 
     """
-    pass
+    if nodes is not None:
+        if not all(n in G for n in nodes):
+            raise ValueError("nodes must be in G")
+        if not all(G.has_edge(u, v) for u, v in combinations(nodes, 2)):
+            raise ValueError("nodes is not a clique")
+        cliques = [set(nodes)]
+        adj = {n: set(G[n]) for n in G}
+        candidates = set(G) - set(nodes)
+    else:
+        cliques = []
+        adj = {n: set(G[n]) for n in G}
+        candidates = set(G)
+
+    def expand_clique(candidates, nays):
+        if not candidates and not nays:
+            yield list(cliques[-1])
+        else:
+            for v in candidates:
+                new_candidates = candidates.intersection(adj[v])
+                new_nays = nays.intersection(adj[v])
+                cliques.append(cliques[-1].union([v]))
+                yield from expand_clique(new_candidates, new_nays)
+                cliques.pop()
+                candidates.remove(v)
+                nays.add(v)
+
+    return expand_clique(candidates, set())
 
 
 @nx._dispatchable(returns_graph=True)
@@ -335,7 +408,20 @@ def make_max_clique_graph(G, create_using=None):
     steps.
 
     """
-    pass
+    if create_using is None:
+        H = nx.Graph()
+    else:
+        H = nx.empty_graph(0, create_using)
+
+    cliques = list(find_cliques(G))
+    H.add_nodes_from(range(len(cliques)))
+
+    for i, ci in enumerate(cliques):
+        for j, cj in enumerate(cliques[i + 1:], start=i + 1):
+            if set(ci) & set(cj):
+                H.add_edge(i, j)
+
+    return H
 
 
 @nx._dispatchable(returns_graph=True)
@@ -373,7 +459,30 @@ def make_clique_bipartite(G, fpos=None, create_using=None, name=None):
         convention for bipartite graphs in NetworkX.
 
     """
-    pass
+    if create_using is None:
+        B = nx.Graph()
+    else:
+        B = nx.empty_graph(0, create_using)
+
+    if name is not None:
+        B.name = name
+
+    # Add the nodes from the original graph
+    B.add_nodes_from(G, bipartite=1)
+
+    # Find maximal cliques and add them as nodes
+    cliques = list(find_cliques(G))
+    B.add_nodes_from(range(len(cliques)), bipartite=0)
+
+    # Add edges between nodes and the cliques they belong to
+    for i, clique in enumerate(cliques):
+        B.add_edges_from((v, i) for v in clique)
+
+    if fpos is not None:
+        pos = nx.spring_layout(B)
+        nx.set_node_attributes(B, pos, 'pos')
+
+    return B
 
 
 @nx._dispatchable
@@ -409,7 +518,27 @@ def node_clique_number(G, nodes=None, cliques=None, separate_nodes=False):
         maximal cliques containing all the given `nodes`.
         The search for the cliques is optimized for `nodes`.
     """
-    pass
+    if cliques is None:
+        cliques = list(find_cliques(G))
+
+    if nodes is None:
+        nodes = list(G)
+
+    if not isinstance(nodes, list):
+        v = nodes
+        if separate_nodes:
+            return max([len(c) for c in cliques if v in c])
+        else:
+            return max([len(c) for c in cliques if v in c] + [1])
+
+    result = {}
+    for v in nodes:
+        if separate_nodes:
+            result[v] = max([len(c) for c in cliques if v in c])
+        else:
+            result[v] = max([len(c) for c in cliques if v in c] + [1])
+
+    return result
 
 
 def number_of_cliques(G, nodes=None, cliques=None):
@@ -418,7 +547,16 @@ def number_of_cliques(G, nodes=None, cliques=None):
     Returns a single or list depending on input nodes.
     Optional list of cliques can be input if already computed.
     """
-    pass
+    if cliques is None:
+        cliques = list(find_cliques(G))
+
+    if nodes is None:
+        nodes = list(G)
+
+    if not isinstance(nodes, list):
+        return sum(1 for c in cliques if nodes in c)
+
+    return {v: sum(1 for c in cliques if v in c) for v in nodes}
 
 
 class MaxWeightClique:
