@@ -65,7 +65,17 @@ def equivalence_classes(iterable, relation):
     >>> equivalence_classes(X, mod3)  # doctest: +SKIP
     {frozenset({1, 4, 7}), frozenset({8, 2, 5}), frozenset({0, 9, 3, 6})}
     """
-    pass
+    classes = []
+    elements = set(iterable)
+    while elements:
+        element = elements.pop()
+        class_ = {element}
+        for other in list(elements):
+            if relation(element, other):
+                class_.add(other)
+                elements.remove(other)
+        classes.append(frozenset(class_))
+    return set(classes)
 
 
 @nx._dispatchable(edge_attrs='weight', returns_graph=True)
@@ -261,13 +271,52 @@ def quotient_graph(G, partition, edge_relation=None, node_data=None,
            Cambridge University Press, 2004.
 
     """
-    pass
+    return _quotient_graph(G, partition, edge_relation, node_data, edge_data,
+                           weight, relabel, create_using)
 
 
 def _quotient_graph(G, partition, edge_relation, node_data, edge_data,
     weight, relabel, create_using):
     """Construct the quotient graph assuming input has been checked"""
-    pass
+    if create_using is None:
+        H = G.__class__()
+    else:
+        H = nx.empty_graph(0, create_using)
+
+    if isinstance(partition, dict):
+        partition = list(partition.values())
+    elif callable(partition):
+        partition = list(equivalence_classes(G, partition))
+
+    if edge_relation is None:
+        edge_relation = lambda b, c: any(G.has_edge(u, v) for u in b for v in c if u != v)
+
+    if node_data is None:
+        def node_data(b):
+            S = G.subgraph(b)
+            return {
+                'graph': S,
+                'nnodes': len(b),
+                'nedges': S.number_of_edges(),
+                'density': nx.density(S)
+            }
+
+    block_pairs = combinations(partition, 2)
+    edges = ((B, C) for (B, C) in block_pairs if edge_relation(B, C))
+
+    if relabel:
+        node_map = {block: i for i, block in enumerate(partition)}
+        H.add_nodes_from((node_map[block], node_data(block)) for block in partition)
+        H.add_edges_from((node_map[B], node_map[C]) for (B, C) in edges)
+    else:
+        H.add_nodes_from((frozenset(block), node_data(block)) for block in partition)
+        H.add_edges_from((frozenset(B), frozenset(C)) for (B, C) in edges)
+
+    if edge_data is not None:
+        for B, C in H.edges():
+            H[B][C].update(edge_data(B, C))
+
+    return H
 
 
 @nx._dispatchable(preserve_all_attrs=True, mutates_input={'not copy': 4},
@@ -361,7 +410,36 @@ def contracted_nodes(G, u, v, self_loops=True, copy=True):
     quotient_graph
 
     """
-    pass
+    # Create a copy of the graph or modify the original graph
+    if copy:
+        H = G.copy()
+    else:
+        H = G
+
+    # Check if both nodes exist in the graph
+    if u not in H or v not in H:
+        raise nx.NetworkXError("Node %s or %s is not in the graph." % (u, v))
+
+    # Merge node attributes
+    H.nodes[u].update(H.nodes[v])
+
+    # Add edges from v to u, including self-loops if specified
+    if H.is_multigraph():
+        for w, d in H.edges(v, data=True):
+            if w != v or self_loops:
+                H.add_edge(u, w if w != v else u, **d)
+    else:
+        for w, d in H.edges(v, data=True):
+            if w != v or self_loops:
+                if H.has_edge(u, w if w != v else u):
+                    H[u][w if w != v else u]['contraction'] = d
+                else:
+                    H.add_edge(u, w if w != v else u, **d)
+
+    # Remove the merged node
+    H.remove_node(v)
+
+    return H
 
 
 identified_nodes = contracted_nodes
@@ -432,4 +510,8 @@ def contracted_edge(G, edge, self_loops=True, copy=True):
     quotient_graph
 
     """
-    pass
+    if not G.has_edge(*edge):
+        raise ValueError(f"Edge {edge} does not exist in graph G; cannot contract it")
+
+    u, v = edge
+    return contracted_nodes(G, u, v, self_loops=self_loops, copy=copy)
