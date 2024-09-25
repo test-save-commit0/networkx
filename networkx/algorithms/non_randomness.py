@@ -69,4 +69,37 @@ def non_randomness(G, k=None, weight='weight'):
            On Randomness Measures for Social Networks,
            SIAM International Conference on Data Mining. 2009
     """
-    pass
+    import numpy as np
+    from scipy import linalg
+
+    if not nx.is_connected(G):
+        raise nx.NetworkXException("Graph G must be connected.")
+    
+    if nx.number_of_selfloops(G) > 0:
+        raise nx.NetworkXError("Graph G contains self-loops.")
+
+    n = G.number_of_nodes()
+    m = G.number_of_edges()
+
+    if k is None:
+        # Use a simple community detection algorithm (Girvan-Newman) to set k
+        communities = list(nx.community.girvan_newman(G))
+        k = len(communities[-1])  # Use the last level of the dendrogram
+
+    # Construct the weighted adjacency matrix
+    A = nx.to_numpy_array(G, weight=weight)
+
+    # Compute the eigenvalues of A
+    eigenvalues = linalg.eigvals(A)
+    eigenvalues.sort()
+    eigenvalues = eigenvalues[::-1]  # Sort in descending order
+
+    # Compute non-randomness (nr) using Eq. (4.4)
+    nr = sum(eigenvalues[:k]) - (k - 1) * (2 * m / n)
+
+    # Compute relative non-randomness (nr_rd) using Eq. (4.5)
+    p = 2 * m / (n * (n - 1))
+    expected_nr = n * p * (1 - p) * (k / (k - 1))
+    nr_rd = (nr - expected_nr) / expected_nr
+
+    return nr, nr_rd
