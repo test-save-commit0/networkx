@@ -132,4 +132,64 @@ def dinitz(G, s, t, capacity='capacity', residual=None, value_only=False,
            https://doi.org/10.1007/11685654_10
 
     """
-    pass
+    if not nx.is_directed(G):
+        raise nx.NetworkXError("Dinitz algorithm works only for directed graphs.")
+
+    if isinstance(G, nx.MultiGraph) or isinstance(G, nx.MultiDiGraph):
+        raise nx.NetworkXError("Dinitz algorithm does not support MultiGraph and MultiDiGraph.")
+
+    if s not in G:
+        raise nx.NetworkXError(f"Source {s} is not in graph")
+    if t not in G:
+        raise nx.NetworkXError(f"Sink {t} is not in graph")
+
+    if residual is None:
+        R = build_residual_network(G, capacity)
+    else:
+        R = residual
+
+    # Initialize flow to 0
+    nx.set_edge_attributes(R, 0, 'flow')
+
+    def bfs():
+        level = {s: 0}
+        queue = deque([s])
+        while queue:
+            u = queue.popleft()
+            for v, attr in R[u].items():
+                if v not in level and attr['capacity'] > attr['flow']:
+                    level[v] = level[u] + 1
+                    queue.append(v)
+                    if v == t:
+                        return level
+        return None
+
+    def dfs(u, flow):
+        if u == t:
+            return flow
+        for v, attr in R[u].items():
+            if level[v] == level[u] + 1 and attr['capacity'] > attr['flow']:
+                bottleneck = dfs(v, min(flow, attr['capacity'] - attr['flow']))
+                if bottleneck > 0:
+                    R[u][v]['flow'] += bottleneck
+                    R[v][u]['flow'] -= bottleneck
+                    return bottleneck
+        return 0
+
+    flow_value = 0
+    while True:
+        level = bfs()
+        if level is None:
+            break
+        while True:
+            flow = dfs(s, float('inf'))
+            if flow == 0:
+                break
+            flow_value += flow
+            if cutoff is not None and flow_value >= cutoff:
+                break
+        if cutoff is not None and flow_value >= cutoff:
+            break
+
+    R.graph['flow_value'] = flow_value
+    return R
