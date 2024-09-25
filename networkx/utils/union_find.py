@@ -75,8 +75,13 @@ class UnionFind:
             [['x', 'y'], ['z']]
 
         """
-        pass
+        return groups(self[x] for x in self)
 
     def union(self, *objects):
         """Find the sets containing the objects and merge them all."""
-        pass
+        roots = [self[x] for x in objects]
+        heaviest = max(roots, key=lambda r: self.weights[r])
+        for r in roots:
+            if r != heaviest:
+                self.weights[heaviest] += self.weights[r]
+                self.parents[r] = heaviest
