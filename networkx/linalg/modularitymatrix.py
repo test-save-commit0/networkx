@@ -61,7 +61,16 @@ def modularity_matrix(G, nodelist=None, weight=None):
     .. [1] M. E. J. Newman, "Modularity and community structure in networks",
            Proc. Natl. Acad. Sci. USA, vol. 103, pp. 8577-8582, 2006.
     """
-    pass
+    import numpy as np
+
+    if nodelist is None:
+        nodelist = list(G)
+    
+    A = nx.to_numpy_array(G, nodelist=nodelist, weight=weight)
+    k = A.sum(axis=1)
+    m = k.sum() / 2
+    B = A - np.outer(k, k) / (2 * m)
+    return B
 
 
 @not_implemented_for('undirected')
@@ -141,4 +150,14 @@ def directed_modularity_matrix(G, nodelist=None, weight=None):
         "Community structure in directed networks",
         Phys. Rev Lett., vol. 100, no. 11, p. 118703, 2008.
     """
-    pass
+    import numpy as np
+
+    if nodelist is None:
+        nodelist = list(G)
+    
+    A = nx.to_numpy_array(G, nodelist=nodelist, weight=weight)
+    k_out = A.sum(axis=1)
+    k_in = A.sum(axis=0)
+    m = k_out.sum()
+    B = A - np.outer(k_out, k_in) / m
+    return B
