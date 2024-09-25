@@ -86,7 +86,26 @@ def latapy_clustering(G, nodes=None, mode='dot'):
        Basic notions for the analysis of large two-mode networks.
        Social Networks 30(1), 31--48.
     """
-    pass
+    if nodes is None:
+        nodes = G
+    
+    if mode not in modes:
+        raise nx.NetworkXError("Mode for bipartite clustering must be 'dot', 'min', or 'max'")
+
+    cc_func = modes[mode]
+    clustering = {}
+
+    for v in nodes:
+        cc = 0.0
+        nbrs = set(G[v])
+        if len(nbrs) > 1:
+            second_order = set.union(*[set(G[u]) for u in nbrs]) - set([v])
+            for u in second_order:
+                cc += cc_func(nbrs, set(G[u]))
+            cc /= len(second_order)
+        clustering[v] = cc
+
+    return clustering
 
 
 clustering = latapy_clustering
@@ -163,7 +182,10 @@ def average_clustering(G, nodes=None, mode='dot'):
         Basic notions for the analysis of large two-mode networks.
         Social Networks 30(1), 31--48.
     """
-    pass
+    if nodes is None:
+        nodes = G
+    clustering = latapy_clustering(G, nodes=nodes, mode=mode)
+    return sum(clustering.values()) / len(clustering)
 
 
 @nx._dispatchable
@@ -207,4 +229,29 @@ def robins_alexander_clustering(G):
            Computational & Mathematical Organization Theory 10(1), 69–94.
 
     """
-    pass
+    from itertools import combinations
+    
+    def four_cycles():
+        cycles = 0
+        for u, v in G.edges():
+            for w in G[u]:
+                if w != v:
+                    for x in G[v]:
+                        if x != u and x in G[w]:
+                            cycles += 1
+        return cycles // 4  # Each cycle is counted 4 times
+
+    def three_paths():
+        paths = 0
+        for n in G:
+            nbrs = list(G[n])
+            paths += sum(len(list(G[u])) - 1 for u in nbrs)
+        return paths
+
+    C_4 = four_cycles()
+    L_3 = three_paths()
+    
+    if L_3 == 0:
+        return 0.0
+    else:
+        return (4.0 * C_4) / L_3
