@@ -81,4 +81,64 @@ def stoer_wagner(G, weight='weight', heap=BinaryHeap):
     >>> cut_value
     4
     """
-    pass
+    if len(G) < 2:
+        raise nx.NetworkXError("Graph has less than two nodes.")
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Graph is not connected.")
+
+    # Check for negative weights
+    if any(d.get(weight, 1) < 0 for u, v, d in G.edges(data=True)):
+        raise nx.NetworkXError("Graph has a negative-weighted edge.")
+
+    # Initialize the algorithm
+    A = {arbitrary_element(G)}
+    G_copy = G.copy()
+    best_cut_value = float('inf')
+    best_partition = None
+
+    while len(G_copy) > 1:
+        # Find the most tightly connected node
+        cut_value, s, t = minimum_cut_phase(G_copy, A, weight, heap)
+        
+        # Update the best cut if necessary
+        if cut_value < best_cut_value:
+            best_cut_value = cut_value
+            best_partition = (list(A), list(set(G) - A))
+
+        # Merge the two nodes
+        if s != t:
+            G_copy = nx.contracted_nodes(G_copy, s, t, self_loops=False)
+        A.add(s)
+
+    return best_cut_value, best_partition
+
+def minimum_cut_phase(G, A, weight, heap):
+    """Performs a minimum cut phase of the Stoer-Wagner algorithm."""
+    n = len(G)
+    h = heap()
+    seen = set()
+    
+    # Initialize the heap with the first node from A
+    start = next(iter(A))
+    h.insert(start, 0)
+    
+    for _ in range(n - 1):
+        # Extract the node with the highest connection to A
+        v = h.extract_min()
+        seen.add(v)
+        
+        # Update the connection values for the neighbors
+        for u, d in G[v].items():
+            if u not in seen:
+                w = d.get(weight, 1)
+                if u in h:
+                    h.decrease_key(u, h[u] - w)
+                else:
+                    h.insert(u, -w)
+    
+    # The last two nodes are s and t
+    t = v
+    s = h.extract_min()
+    cut_value = -h[s]
+    
+    return cut_value, s, t
