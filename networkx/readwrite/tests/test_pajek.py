@@ -123,3 +123,61 @@ class TestPajek:
         assert nodes_equal(list(G), list(H))
         assert edges_equal(list(G.edges()), list(H.edges()))
         assert G.graph == H.graph
+
+    def test_write_read_with_node_attributes(self):
+        import io
+
+        G = nx.Graph()
+        G.add_node(1, size=10, color="red")
+        G.add_node(2, size=20, color="blue")
+        G.add_edge(1, 2)
+        fh = io.BytesIO()
+        nx.write_pajek(G, fh)
+        fh.seek(0)
+        H = nx.read_pajek(fh)
+        assert nodes_equal(list(G), list(H))
+        assert edges_equal(list(G.edges()), list(H.edges()))
+        assert G.nodes[1]["size"] == H.nodes["1"]["size"]
+        assert G.nodes[1]["color"] == H.nodes["1"]["color"]
+        assert G.nodes[2]["size"] == H.nodes["2"]["size"]
+        assert G.nodes[2]["color"] == H.nodes["2"]["color"]
+
+    def test_write_read_with_edge_attributes(self):
+        import io
+
+        G = nx.Graph()
+        G.add_edge(1, 2, weight=3.14, label="test")
+        fh = io.BytesIO()
+        nx.write_pajek(G, fh)
+        fh.seek(0)
+        H = nx.read_pajek(fh)
+        assert nodes_equal(list(G), list(H))
+        assert edges_equal(list(G.edges(data=True)), list(H.edges(data=True)))
+
+    def test_special_characters(self):
+        import io
+
+        G = nx.Graph()
+        G.add_edge("Node A", "Node B (special)")
+        G.add_edge("Node C", "Node D [special]")
+        fh = io.BytesIO()
+        nx.write_pajek(G, fh)
+        fh.seek(0)
+        H = nx.read_pajek(fh)
+        assert nodes_equal(list(G), list(H))
+        assert edges_equal(list(G.edges()), list(H.edges()))
+
+    def test_multigraph(self):
+        import io
+
+        G = nx.MultiGraph()
+        G.add_edge(1, 2)
+        G.add_edge(1, 2)
+        G.add_edge(1, 3)
+        fh = io.BytesIO()
+        nx.write_pajek(G, fh)
+        fh.seek(0)
+        H = nx.read_pajek(fh)
+        assert H.is_multigraph()
+        assert nodes_equal(list(G), list(H))
+        assert edges_equal(list(G.edges()), list(H.edges()))
