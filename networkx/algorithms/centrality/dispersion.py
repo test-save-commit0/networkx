@@ -51,4 +51,32 @@ def dispersion(G, u=None, v=None, normalized=True, alpha=1.0, b=0.0, c=0.0):
         https://arxiv.org/pdf/1310.6753v1.pdf
 
     """
-    pass
+    def calc_dispersion(G, u, v):
+        """Calculate dispersion for a single pair of nodes."""
+        common_neighbors = set(G.neighbors(u)) & set(G.neighbors(v))
+        if len(common_neighbors) < 2:
+            return 0
+        
+        dispersion = 0
+        for s, t in combinations(common_neighbors, 2):
+            if not G.has_edge(s, t):
+                dispersion += 1
+        
+        if normalized:
+            embeddedness = len(common_neighbors)
+            if embeddedness + c != 0:
+                dispersion = ((dispersion + b) ** alpha) / (embeddedness + c)
+            else:
+                dispersion = 0
+        
+        return dispersion
+
+    if u is not None:
+        if v is not None:
+            return calc_dispersion(G, u, v)
+        else:
+            return {v: calc_dispersion(G, u, v) for v in G.nodes() if v != u}
+    elif v is not None:
+        return {u: calc_dispersion(G, u, v) for u in G.nodes() if u != v}
+    else:
+        return {u: {v: calc_dispersion(G, u, v) for v in G.nodes() if v != u} for u in G.nodes()}
