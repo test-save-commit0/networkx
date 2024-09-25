@@ -100,7 +100,39 @@ def k_components(G, min_density=0.95):
             https://doi.org/10.2307/3088904
 
     """
-    pass
+    if G.is_directed():
+        raise nx.NetworkXNotImplemented("Not implemented for directed graphs.")
+    
+    # Initialize the result dictionary
+    k_comp = defaultdict(list)
+    
+    # Start with k=2 (biconnected components)
+    k = 2
+    k_comp[k] = list(nx.biconnected_components(G))
+    
+    # Get the maximum k-core number
+    max_core = max(nx.core_number(G).values())
+    
+    # Iterate through k values from 3 to max_core
+    for k in range(3, max_core + 1):
+        # Get the k-core subgraph
+        k_core = nx.k_core(G, k)
+        
+        # If k-core is empty, we're done
+        if len(k_core) == 0:
+            break
+        
+        # Find biconnected components in the k-core
+        bicomponents = list(nx.biconnected_components(k_core))
+        
+        # For each bicomponent, check if it's a k-component
+        for bicomp in bicomponents:
+            if len(bicomp) > k:
+                subgraph = k_core.subgraph(bicomp)
+                if nx.node_connectivity(subgraph) >= k:
+                    k_comp[k].append(set(bicomp))
+    
+    return dict(k_comp)
 
 
 class _AntiGraph(nx.Graph):
@@ -141,7 +173,7 @@ class _AntiGraph(nx.Graph):
         """Returns an iterator over all neighbors of node n in the
         dense graph.
         """
-        pass
+        return iter(set(self._adj) - set(self._adj[n]) - {n})
 
 
     class AntiAtlasView(Mapping):
@@ -186,7 +218,14 @@ class _AntiGraph(nx.Graph):
 
     def subgraph(self, nodes):
         """This subgraph method returns a full AntiGraph. Not a View"""
-        pass
+        nodes = set(nodes)
+        H = _AntiGraph()
+        H.add_nodes_from(nodes)
+        H._adj = {n: {nbr: self._adj[n].get(nbr, self.all_edge_dict)
+                      for nbr in set(self._adj) - set(self._adj[n]) - {n}
+                      if nbr in nodes}
+                  for n in nodes}
+        return H
 
 
     class AntiDegreeView(nx.reportviews.DegreeView):
@@ -238,7 +277,7 @@ class _AntiGraph(nx.Graph):
         [(0, 1), (1, 2)]
 
         """
-        pass
+        return self.AntiDegreeView(self)
 
     def adjacency(self):
         """Returns an iterator of (node, adjacency set) tuples for all nodes
@@ -254,4 +293,5 @@ class _AntiGraph(nx.Graph):
            the graph.
 
         """
-        pass
+        for n in self:
+            yield (n, set(self._adj) - set(self._adj[n]) - {n})
