@@ -56,4 +56,19 @@ def is_semiconnected(G):
     is_connected
     is_biconnected
     """
-    pass
+    if len(G) == 0:
+        raise nx.NetworkXPointlessConcept("Connectivity is undefined for the null graph.")
+
+    # Step 1: Condense the graph
+    scc = nx.strongly_connected_components(G)
+    H = nx.condensation(G, scc)
+
+    # Step 2: If H has only one node, G is strongly connected, thus semiconnected
+    if len(H) == 1:
+        return True
+
+    # Step 3: Check if H (a DAG) is semiconnected
+    topological_order = list(nx.topological_sort(H))
+    
+    # Check if there's an edge between consecutive nodes in the topological order
+    return all(H.has_edge(u, v) for u, v in pairwise(topological_order))
