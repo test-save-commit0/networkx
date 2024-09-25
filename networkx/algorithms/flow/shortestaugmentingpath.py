@@ -11,7 +11,84 @@ __all__ = ['shortest_augmenting_path']
 def shortest_augmenting_path_impl(G, s, t, capacity, residual, two_phase,
     cutoff):
     """Implementation of the shortest augmenting path algorithm."""
-    pass
+    if residual is None:
+        R = build_residual_network(G, capacity)
+    else:
+        R = residual
+
+    # Initialize flow to zero
+    for u in R:
+        for e in R[u].values():
+            e['flow'] = 0
+
+    if cutoff is None:
+        cutoff = float('inf')
+
+    R_nodes = R.nodes
+    R_succ = R.succ
+
+    def augment(path):
+        """Augment flow along a path from s to t."""
+        # Find minimum residual capacity along the path
+        flow = min(R_succ[u][v]['capacity'] - R_succ[u][v]['flow']
+                   for u, v in zip(path, path[1:]))
+        # Augment flow along the path
+        for u, v in zip(path, path[1:]):
+            edge = R_succ[u][v]
+            edge['flow'] += flow
+            R_succ[v][u]['flow'] -= flow
+        return flow
+
+    def bidirectional_bfs():
+        """Bidirectional breadth-first search for an augmenting path."""
+        pred = {s: None}
+        succ = {t: None}
+        forward = {s: 0}
+        backward = {t: 0}
+        forward_fringe = deque([(s, 0)])
+        backward_fringe = deque([(t, 0)])
+        while forward_fringe and backward_fringe:
+            if len(forward_fringe) <= len(backward_fringe):
+                u, d = forward_fringe.popleft()
+                for v, edge in R_succ[u].items():
+                    if v not in forward:
+                        if edge['flow'] < edge['capacity']:
+                            forward[v] = d + 1
+                            pred[v] = u
+                            forward_fringe.append((v, d + 1))
+                            if v in backward:
+                                return v, pred, succ
+            else:
+                u, d = backward_fringe.popleft()
+                for v, edge in R.pred[u].items():
+                    if v not in backward:
+                        if edge['flow'] < edge['capacity']:
+                            backward[v] = d + 1
+                            succ[v] = u
+                            backward_fringe.append((v, d + 1))
+                            if v in forward:
+                                return v, pred, succ
+        return None, None, None
+
+    flow_value = 0
+    while flow_value < cutoff:
+        v, pred, succ = bidirectional_bfs()
+        if pred is None:
+            break
+        path = [v]
+        u = v
+        while u != s:
+            u = pred[u]
+            path.append(u)
+        path.reverse()
+        u = v
+        while u != t:
+            u = succ[u]
+            path.append(u)
+        flow_value += augment(path)
+
+    R.graph['flow_value'] = flow_value
+    return R
 
 
 @nx._dispatchable(edge_attrs={'capacity': float('inf')}, returns_graph=True)
@@ -26,7 +103,6 @@ def shortest_augmenting_path(G, s, t, capacity='capacity', residual=None,
 
     This algorithm has a running time of $O(n^2 m)$ for $n$ nodes and $m$
     edges.
-
 
     Parameters
     ----------
@@ -137,4 +213,17 @@ def shortest_augmenting_path(G, s, t, capacity='capacity', residual=None,
     True
 
     """
-    pass
+    if isinstance(G, nx.MultiGraph) or isinstance(G, nx.MultiDiGraph):
+        raise nx.NetworkXError("Shortest augmenting path algorithm does not support MultiGraph and MultiDiGraph.")
+
+    if s not in G:
+        raise nx.NetworkXError(f"Source node {s} not in graph")
+    if t not in G:
+        raise nx.NetworkXError(f"Sink node {t} not in graph")
+
+    if s == t:
+        raise nx.NetworkXError("Source and sink are the same node")
+
+    R = shortest_augmenting_path_impl(G, s, t, capacity, residual, two_phase, cutoff)
+
+    return R
