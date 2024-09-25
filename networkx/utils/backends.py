@@ -228,7 +228,22 @@ def _get_backends(group, *, load_and_call=False):
     The `nx-loopback` backend is removed if it exists, as it is only available during testing.
     A warning is displayed if an error occurs while loading a backend.
     """
-    pass
+    backends = {}
+    for entry_point in entry_points().get(group, []):
+        if entry_point.name in backends:
+            warnings.warn(f"Backend {entry_point.name} defined more than once.")
+        try:
+            backend = entry_point.load()
+            if load_and_call:
+                backend = backend()
+            backends[entry_point.name] = backend
+        except Exception as e:
+            warnings.warn(f"Error loading backend {entry_point.name}: {str(e)}")
+    
+    # Remove nx-loopback backend if it exists
+    backends.pop('nx-loopback', None)
+    
+    return backends
 
 
 backends = _get_backends('networkx.backends')
@@ -593,11 +608,21 @@ class _dispatchable:
 
     def _can_backend_run(self, backend_name, /, *args, **kwargs):
         """Can the specified backend run this algorithm with these arguments?"""
-        pass
+        backend = _load_backend(backend_name)
+        if not hasattr(backend, self.name):
+            return False
+        if hasattr(backend, 'can_run'):
+            return backend.can_run(self.name, args, kwargs)
+        return True
 
     def _should_backend_run(self, backend_name, /, *args, **kwargs):
         """Can/should the specified backend run this algorithm with these arguments?"""
-        pass
+        if not self._can_backend_run(backend_name, *args, **kwargs):
+            return False
+        backend = _load_backend(backend_name)
+        if hasattr(backend, 'should_run'):
+            return backend.should_run(self.name, args, kwargs)
+        return True
 
     def _convert_arguments(self, backend_name, args, kwargs, *, use_cache):
         """Convert graph arguments to the specified backend.
@@ -606,22 +631,94 @@ class _dispatchable:
         -------
         args tuple and kwargs dict
         """
-        pass
+        backend = _load_backend(backend_name)
+        new_args = list(args)
+        new_kwargs = kwargs.copy()
+
+        for gname, pos in self.graphs.items():
+            if pos < len(args):
+                graph = args[pos]
+            elif gname in kwargs:
+                graph = kwargs[gname]
+            else:
+                continue
+
+            if graph is None:
+                continue
+
+            if gname in self.list_graphs:
+                converted_graphs = [
+                    backend.convert_from_nx(g, use_cache=use_cache)
+                    if not hasattr(g, '__networkx_backend__') or
+                    getattr(g, '__networkx_backend__') != backend_name
+                    else g
+                    for g in graph
+                ]
+                if pos < len(args):
+                    new_args[pos] = converted_graphs
+                else:
+                    new_kwargs[gname] = converted_graphs
+            else:
+                if not hasattr(graph, '__networkx_backend__') or getattr(graph, '__networkx_backend__') != backend_name:
+                    converted_graph = backend.convert_from_nx(graph, use_cache=use_cache)
+                    if pos < len(args):
+                        new_args[pos] = converted_graph
+                    else:
+                        new_kwargs[gname] = converted_graph
+
+        return tuple(new_args), new_kwargs
 
     def _convert_and_call(self, backend_name, args, kwargs, *,
         fallback_to_nx=False):
         """Call this dispatchable function with a backend, converting graphs if necessary."""
-        pass
+        backend = _load_backend(backend_name)
+        if not hasattr(backend, self.name):
+            if fallback_to_nx:
+                return self.orig_func(*args, **kwargs)
+            raise nx.NetworkXNotImplemented(f"'{self.name}' not implemented by {backend_name}")
+
+        new_args, new_kwargs = self._convert_arguments(backend_name, args, kwargs, use_cache=True)
+        result = getattr(backend, self.name)(*new_args, **new_kwargs)
+
+        if self._returns_graph:
+            return backend.convert_to_nx(result)
+        return result
 
     def _convert_and_call_for_tests(self, backend_name, args, kwargs, *,
         fallback_to_nx=False):
         """Call this dispatchable function with a backend; for use with testing."""
-        pass
+        backend = _load_backend(backend_name)
+        if not hasattr(backend, self.name):
+            if fallback_to_nx:
+                return self.orig_func(*args, **kwargs)
+            raise nx.NetworkXNotImplemented(f"'{self.name}' not implemented by {backend_name}")
+
+        new_args, new_kwargs = self._convert_arguments(backend_name, args, kwargs, use_cache=False)
+        result = getattr(backend, self.name)(*new_args, **new_kwargs)
+
+        if self._returns_graph:
+            return backend.convert_to_nx(result)
+        return result
 
     def _make_doc(self):
         """Generate the backends section at the end for functions having an alternate
         backend implementation(s) using the `backend_info` entry-point."""
-        pass
+        doc = self._orig_doc or ""
+        backend_sections = []
+
+        for backend_name, info in backend_info.items():
+            if 'functions' in info and self.name in info['functions']:
+                backend_doc = f"\n\n{backend_name} Backend Implementation\n"
+                backend_doc += "-" * (len(backend_doc) - 2) + "\n"
+                backend_doc += info['functions'][self.name]
+                backend_sections.append(backend_doc)
+
+        if backend_sections:
+            doc += "\n\nAdditional Backend Implementations\n"
+            doc += "=================================\n"
+            doc += "\n".join(backend_sections)
+
+        return doc
 
     def __reduce__(self):
         """Allow this object to be serialized with pickle.
