@@ -36,7 +36,11 @@ def is_threshold_graph(G):
     ----------
     .. [1] Threshold graphs: https://en.wikipedia.org/wiki/Threshold_graph
     """
-    pass
+    if not G:
+        return True  # Empty graph is a threshold graph
+    
+    degree_sequence = sorted((d for n, d in G.degree()), reverse=True)
+    return is_threshold_sequence(degree_sequence)
 
 
 def is_threshold_sequence(degree_sequence):
@@ -49,7 +53,22 @@ def is_threshold_sequence(degree_sequence):
     node that connects to the remaining nodes.  If this deconstruction
     fails then the sequence is not a threshold sequence.
     """
-    pass
+    if not degree_sequence:
+        return True  # Empty sequence is a threshold sequence
+    
+    sequence = list(degree_sequence)
+    n = len(sequence)
+    
+    while sequence:
+        if sequence[-1] == 0:  # Remove isolated node
+            sequence.pop()
+        elif sequence[0] == len(sequence) - 1:  # Remove dominating node
+            highest = sequence.pop(0)
+            sequence = [d - 1 for d in sequence]
+        else:
+            return False  # Neither isolated nor dominating node found
+    
+    return True
 
 
 def creation_sequence(degree_sequence, with_labels=False, compact=False):
@@ -80,7 +99,29 @@ def creation_sequence(degree_sequence, with_labels=False, compact=False):
 
     Returns None if the sequence is not a threshold sequence
     """
-    pass
+    if with_labels and compact:
+        raise ValueError("with_labels and compact cannot both be True")
+
+    if not is_threshold_sequence(degree_sequence):
+        return None
+
+    n = len(degree_sequence)
+    cs = []
+    ds = list(degree_sequence)
+    for i in range(n):
+        if ds[0] == n - i - 1:
+            cs.append('d')
+            ds = [d - 1 for d in ds[1:]]
+        else:
+            cs.append('i')
+            ds.pop()
+
+    if with_labels:
+        return list(enumerate(cs))
+    elif compact:
+        return make_compact(cs)
+    else:
+        return cs
 
 
 def make_compact(creation_sequence):
