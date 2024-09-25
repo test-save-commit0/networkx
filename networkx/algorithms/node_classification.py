@@ -71,13 +71,55 @@ def harmonic_function(G, max_iter=30, label_name='label'):
     Semi-supervised learning using gaussian fields and harmonic functions.
     In ICML (Vol. 3, pp. 912-919).
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+
+    # Get label information
+    labels, label_dict = _get_label_info(G, label_name)
+    if len(labels) == 0:
+        raise nx.NetworkXError(f"No nodes in G have the attribute {label_name}")
+
+    n_total = len(G)
+    n_labeled = len(labels)
+    n_classes = len(label_dict)
+
+    # Create adjacency matrix
+    adj_matrix = nx.adjacency_matrix(G)
+
+    # Create diagonal degree matrix
+    degrees = sparse.diags([dict(G.degree()).get(i, 0) for i in range(n_total)])
+
+    # Compute graph Laplacian
+    laplacian = degrees - adj_matrix
+
+    # Partition Laplacian matrix
+    lap_uu = laplacian[n_labeled:, n_labeled:]
+    lap_ul = laplacian[n_labeled:, :n_labeled]
+
+    # Create label matrix
+    F = np.zeros((n_total, n_classes))
+    for idx, label in labels:
+        F[idx, label] = 1
+
+    # Iterative solution
+    Fu = np.zeros((n_total - n_labeled, n_classes))
+    for _ in range(max_iter):
+        Fu_new = -sparse.linalg.spsolve(lap_uu, lap_ul.dot(F[:n_labeled]))
+        if np.allclose(Fu, Fu_new):
+            break
+        Fu = Fu_new
+
+    F[n_labeled:] = Fu
+
+    # Get predicted labels
+    predicted = [label_dict[i] for i in F.argmax(axis=1)]
+
+    return predicted
 
 
 @nx.utils.not_implemented_for('directed')
 @nx._dispatchable(node_attrs='label_name')
-def local_and_global_consistency(G, alpha=0.99, max_iter=30, label_name='label'
-    ):
+def local_and_global_consistency(G, alpha=0.99, max_iter=30, label_name='label'):
     """Node classification by Local and Global Consistency
 
     Function for computing Local and global consistency algorithm by Zhou et al.
@@ -122,7 +164,42 @@ def local_and_global_consistency(G, alpha=0.99, max_iter=30, label_name='label'
     Learning with local and global consistency.
     Advances in neural information processing systems, 16(16), 321-328.
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+
+    # Get label information
+    labels, label_dict = _get_label_info(G, label_name)
+    if len(labels) == 0:
+        raise nx.NetworkXError(f"No nodes in G have the attribute {label_name}")
+
+    n_total = len(G)
+    n_classes = len(label_dict)
+
+    # Create adjacency matrix
+    adj_matrix = nx.adjacency_matrix(G)
+
+    # Create diagonal degree matrix
+    degrees = sparse.diags([dict(G.degree()).get(i, 0) for i in range(n_total)])
+
+    # Compute normalized graph Laplacian
+    laplacian = sparse.eye(n_total) - alpha * sparse.linalg.inv(degrees) @ adj_matrix
+
+    # Create initial label matrix
+    F = np.zeros((n_total, n_classes))
+    for idx, label in labels:
+        F[idx, label] = 1
+
+    # Iterative solution
+    for _ in range(max_iter):
+        F_new = sparse.linalg.spsolve(laplacian, F)
+        if np.allclose(F, F_new):
+            break
+        F = F_new
+
+    # Get predicted labels
+    predicted = [label_dict[i] for i in F.argmax(axis=1)]
+
+    return predicted
 
 
 def _get_label_info(G, label_name):
@@ -142,4 +219,20 @@ def _get_label_info(G, label_name):
         Array of labels
         i-th element contains the label corresponding label ID `i`
     """
-    pass
+    import numpy as np
+
+    labels = []
+    label_set = set()
+
+    for node, data in G.nodes(data=True):
+        if label_name in data:
+            label = data[label_name]
+            label_set.add(label)
+            labels.append((node, label))
+
+    label_dict = np.array(sorted(label_set))
+    label_to_id = {label: i for i, label in enumerate(label_dict)}
+
+    labels = np.array([(node, label_to_id[label]) for node, label in labels])
+
+    return labels, label_dict
