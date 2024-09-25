@@ -56,8 +56,28 @@ def treewidth_min_degree(G):
     Treewidth decomposition : (int, Graph) tuple
           2-tuple with treewidth and the corresponding decomposed tree.
     """
-    heuristic = MinDegreeHeuristic(G)
-    return treewidth_decomp(G, heuristic.min_degree_heuristic)
+    H = G.copy()
+    heuristic = MinDegreeHeuristic(H)
+    elimination_order = []
+    tree = nx.Graph()
+    tree.add_nodes_from(G.nodes())
+    
+    while H:
+        v = heuristic.min_degree_heuristic(H)
+        elimination_order.append(v)
+        nbrs = list(H.neighbors(v))
+        
+        # Create a clique with the neighbors of v
+        for u, w in itertools.combinations(nbrs, 2):
+            if not H.has_edge(u, w):
+                H.add_edge(u, w)
+                tree.add_edge(u, w)
+        
+        H.remove_node(v)
+        heuristic.update(H, v)
+    
+    treewidth = max(len(list(tree.neighbors(v))) for v in tree.nodes())
+    return treewidth, tree
 
 
 @not_implemented_for('directed')
@@ -93,12 +113,28 @@ class MinDegreeHeuristic:
 
     def __init__(self, graph):
         self._graph = graph
-        self._update_nodes = []
+        self._update_nodes = set()
         self._degreeq = []
         self.count = itertools.count()
         for n in graph:
             self._degreeq.append((len(graph[n]), next(self.count), n))
         heapify(self._degreeq)
+
+    def min_degree_heuristic(self, graph):
+        while self._degreeq:
+            deg, _, node = heappop(self._degreeq)
+            if node not in self._update_nodes:
+                return node
+            self._update_nodes.remove(node)
+        return None
+
+    def update(self, graph, eliminated_node):
+        nbrs = set(graph[eliminated_node])
+        for u in nbrs:
+            if u in graph:
+                deg = len(graph[u])
+                heappush(self._degreeq, (deg, next(self.count), u))
+                self._update_nodes.add(u)
 
 
 def min_fill_in_heuristic(graph):
@@ -144,6 +180,8 @@ def treewidth_decomp(G, heuristic=min_fill_in_heuristic):
     
     while H:
         v = heuristic(H)
+        if v is None:
+            break
         elimination_order.append(v)
         nbrs = list(H.neighbors(v))
         
@@ -155,5 +193,5 @@ def treewidth_decomp(G, heuristic=min_fill_in_heuristic):
         
         H.remove_node(v)
     
-    treewidth = max(len(list(tree.neighbors(v))) for v in tree.nodes())
+    treewidth = max(len(list(tree.neighbors(v))) for v in tree.nodes()) if tree.nodes() else 0
     return treewidth, tree
