@@ -91,7 +91,28 @@ def to_nested_tuple(T, root, canonical_form=False):
         ((((),),),)
 
     """
-    pass
+    def _to_tuple(node):
+        children = [child for child in T.neighbors(node) if child != parent.get(node)]
+        if not children:
+            return ()
+        subtrees = [_to_tuple(child) for child in children]
+        if canonical_form:
+            subtrees.sort(key=lambda x: (len(x), x))
+        return tuple(subtrees)
+
+    if not nx.is_tree(T):
+        raise NotATree("The graph is not a tree.")
+
+    parent = {root: None}
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        for child in T.neighbors(node):
+            if child not in parent:
+                parent[child] = node
+                stack.append(child)
+
+    return _to_tuple(root)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -144,7 +165,23 @@ def from_nested_tuple(sequence, sensible_relabeling=False):
         True
 
     """
-    pass
+    def _from_tuple(tup, parent=None):
+        node = next(counter)
+        T.add_node(node)
+        if parent is not None:
+            T.add_edge(parent, node)
+        for subtree in tup:
+            _from_tuple(subtree, node)
+
+    T = nx.Graph()
+    counter = iter(range(len(sequence) + 1))
+    _from_tuple(sequence)
+
+    if sensible_relabeling:
+        mapping = {old: new for new, old in enumerate(nx.bfs_tree(T, 0))}
+        T = nx.relabel_nodes(T, mapping)
+
+    return T
 
 
 @not_implemented_for('directed')
@@ -221,7 +258,30 @@ def to_prufer_sequence(T):
     True
 
     """
-    pass
+    if not nx.is_tree(T):
+        raise NotATree("The graph is not a tree.")
+
+    n = T.number_of_nodes()
+    if n < 2:
+        raise nx.NetworkXPointlessConcept("Prüfer sequence undefined for trees with fewer than two nodes.")
+
+    if set(T.nodes()) != set(range(n)):
+        raise KeyError("The nodes must be labeled 0, ..., n-1")
+
+    degree = dict(T.degree())
+    leaves = [node for node in T.nodes() if degree[node] == 1]
+    sequence = []
+
+    for _ in range(n - 2):
+        leaf = min(leaves)
+        neighbor = next(iter(T.neighbors(leaf)))
+        sequence.append(neighbor)
+        degree[neighbor] -= 1
+        if degree[neighbor] == 1:
+            leaves.append(neighbor)
+        leaves.remove(leaf)
+
+    return sequence
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -291,4 +351,26 @@ def from_prufer_sequence(sequence):
     True
 
     """
-    pass
+    n = len(sequence) + 2
+    if not all(0 <= x < n for x in sequence):
+        raise nx.NetworkXError("Prüfer sequence is not valid.")
+
+    T = nx.Graph()
+    T.add_nodes_from(range(n))
+    
+    degree = [1] * n
+    for i in sequence:
+        degree[i] += 1
+
+    for u in sequence:
+        for v in range(n):
+            if degree[v] == 1:
+                T.add_edge(u, v)
+                degree[u] -= 1
+                degree[v] -= 1
+                break
+
+    last_two = [i for i in range(n) if degree[i] == 1]
+    T.add_edge(last_two[0], last_two[1])
+
+    return T
