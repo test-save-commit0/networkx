@@ -63,4 +63,40 @@ def maximal_extendability(G):
           https://doi.org/10.1016/0012-365X(80)90037-0
 
     """
-    pass
+    # Check if the graph is connected
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("The graph G is not connected.")
+
+    # Check if the graph is bipartite
+    if not nx.is_bipartite(G):
+        raise nx.NetworkXError("The graph G is not bipartite.")
+
+    # Get the bipartite sets
+    X, Y = nx.bipartite.sets(G)
+
+    # Check if the graph has a perfect matching
+    matching = nx.bipartite.maximum_matching(G)
+    if len(matching) != len(G):
+        raise nx.NetworkXError("The graph G does not contain a perfect matching.")
+
+    # Construct the residual graph
+    G_M = nx.DiGraph()
+    G_M.add_nodes_from(G.nodes())
+    for u, v in G.edges():
+        if (u in matching and matching[u] == v) or (v in matching and matching[v] == u):
+            G_M.add_edge(v, u)
+        else:
+            G_M.add_edge(u, v)
+
+    # Check if the residual graph is strongly connected
+    if not nx.is_strongly_connected(G_M):
+        raise nx.NetworkXError("The residual graph of G is not strongly connected.")
+
+    # Compute the maximum number of vertex-disjoint paths
+    min_paths = float('inf')
+    for u in X:
+        for v in Y:
+            max_flow = nx.maximum_flow_value(G_M, u, v)
+            min_paths = min(min_paths, max_flow)
+
+    return min_paths
