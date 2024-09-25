@@ -98,13 +98,31 @@ class TimeRespectingGraphMatcher(GraphMatcher):
         Edges one hop out from a node in the mapping should be
         time-respecting with respect to each other.
         """
-        pass
+        dates = []
+        for neighbor in neighbors:
+            edge_data = Gx.get_edge_data(Gx_node, neighbor)
+            if isinstance(edge_data, dict):
+                dates.append(edge_data.get(self.temporal_attribute_name))
+            elif isinstance(edge_data, list):
+                dates.extend(e.get(self.temporal_attribute_name) for e in edge_data if isinstance(e, dict))
+        
+        return all(abs(d1 - d2) <= self.delta for d1 in dates for d2 in dates if d1 != d2)
 
     def two_hop(self, Gx, core_x, Gx_node, neighbors):
         """
         Paths of length 2 from Gx_node should be time-respecting.
         """
-        pass
+        for n1 in neighbors:
+            if n1 in core_x:
+                for n2 in Gx.neighbors(n1):
+                    if n2 in core_x and n2 != Gx_node:
+                        e1 = Gx.get_edge_data(Gx_node, n1)
+                        e2 = Gx.get_edge_data(n1, n2)
+                        t1 = e1.get(self.temporal_attribute_name) if isinstance(e1, dict) else None
+                        t2 = e2.get(self.temporal_attribute_name) if isinstance(e2, dict) else None
+                        if t1 and t2 and abs(t1 - t2) > self.delta:
+                            return False
+        return True
 
     def semantic_feasibility(self, G1_node, G2_node):
         """Returns True if adding (G1_node, G2_node) is semantically
@@ -114,7 +132,18 @@ class TimeRespectingGraphMatcher(GraphMatcher):
         maintain the self.tests if needed, to keep the match() method
         functional. Implementations should consider multigraphs.
         """
-        pass
+        G1_nbrs = set(self.G1.neighbors(G1_node)) - set(self.core_1.keys())
+        G2_nbrs = set(self.G2.neighbors(G2_node)) - set(self.core_2.keys())
+        
+        # Check one-hop time-respecting property
+        if not self.one_hop(self.G1, G1_node, G1_nbrs) or not self.one_hop(self.G2, G2_node, G2_nbrs):
+            return False
+        
+        # Check two-hop time-respecting property
+        if not self.two_hop(self.G1, self.core_1, G1_node, G1_nbrs) or not self.two_hop(self.G2, self.core_2, G2_node, G2_nbrs):
+            return False
+        
+        return True
 
 
 class TimeRespectingDiGraphMatcher(DiGraphMatcher):
@@ -145,31 +174,61 @@ class TimeRespectingDiGraphMatcher(DiGraphMatcher):
         """
         Get the dates of edges from predecessors.
         """
-        pass
+        dates = []
+        for p in pred:
+            if p in core_x:
+                edge_data = Gx.get_edge_data(p, Gx_node)
+                if isinstance(edge_data, dict):
+                    dates.append(edge_data.get(self.temporal_attribute_name))
+                elif isinstance(edge_data, list):
+                    dates.extend(e.get(self.temporal_attribute_name) for e in edge_data if isinstance(e, dict))
+        return dates
 
     def get_succ_dates(self, Gx, Gx_node, core_x, succ):
         """
         Get the dates of edges to successors.
         """
-        pass
+        dates = []
+        for s in succ:
+            if s in core_x:
+                edge_data = Gx.get_edge_data(Gx_node, s)
+                if isinstance(edge_data, dict):
+                    dates.append(edge_data.get(self.temporal_attribute_name))
+                elif isinstance(edge_data, list):
+                    dates.extend(e.get(self.temporal_attribute_name) for e in edge_data if isinstance(e, dict))
+        return dates
 
     def one_hop(self, Gx, Gx_node, core_x, pred, succ):
         """
         The ego node.
         """
-        pass
+        pred_dates = self.get_pred_dates(Gx, Gx_node, core_x, pred)
+        succ_dates = self.get_succ_dates(Gx, Gx_node, core_x, succ)
+        return self.test_one(pred_dates, succ_dates) and self.test_two(pred_dates, succ_dates)
 
     def two_hop_pred(self, Gx, Gx_node, core_x, pred):
         """
         The predecessors of the ego node.
         """
-        pass
+        for p in pred:
+            if p in core_x:
+                p_pred = set(Gx.predecessors(p)) - {Gx_node}
+                p_succ = set(Gx.successors(p)) - {Gx_node}
+                if not self.one_hop(Gx, p, core_x, p_pred, p_succ):
+                    return False
+        return True
 
     def two_hop_succ(self, Gx, Gx_node, core_x, succ):
         """
         The successors of the ego node.
         """
-        pass
+        for s in succ:
+            if s in core_x:
+                s_pred = set(Gx.predecessors(s)) - {Gx_node}
+                s_succ = set(Gx.successors(s)) - {Gx_node}
+                if not self.one_hop(Gx, s, core_x, s_pred, s_succ):
+                    return False
+        return True
 
     def test_one(self, pred_dates, succ_dates):
         """
@@ -177,14 +236,15 @@ class TimeRespectingDiGraphMatcher(DiGraphMatcher):
         time-respecting with respect to each other, regardless of
         direction.
         """
-        pass
+        all_dates = pred_dates + succ_dates
+        return all(abs(d1 - d2) <= self.delta for d1 in all_dates for d2 in all_dates if d1 != d2)
 
     def test_two(self, pred_dates, succ_dates):
         """
         Edges from a dual Gx_node in the mapping should be ordered in
         a time-respecting manner.
         """
-        pass
+        return all(p <= s for p in pred_dates for s in succ_dates)
 
     def semantic_feasibility(self, G1_node, G2_node):
         """Returns True if adding (G1_node, G2_node) is semantically
@@ -194,4 +254,21 @@ class TimeRespectingDiGraphMatcher(DiGraphMatcher):
         maintain the self.tests if needed, to keep the match() method
         functional. Implementations should consider multigraphs.
         """
-        pass
+        G1_pred = set(self.G1.predecessors(G1_node)) - set(self.core_1.keys())
+        G2_pred = set(self.G2.predecessors(G2_node)) - set(self.core_2.keys())
+        G1_succ = set(self.G1.successors(G1_node)) - set(self.core_1.keys())
+        G2_succ = set(self.G2.successors(G2_node)) - set(self.core_2.keys())
+
+        # Check one-hop time-respecting property
+        if not (self.one_hop(self.G1, G1_node, self.core_1, G1_pred, G1_succ) and
+                self.one_hop(self.G2, G2_node, self.core_2, G2_pred, G2_succ)):
+            return False
+
+        # Check two-hop time-respecting property
+        if not (self.two_hop_pred(self.G1, G1_node, self.core_1, G1_pred) and
+                self.two_hop_pred(self.G2, G2_node, self.core_2, G2_pred) and
+                self.two_hop_succ(self.G1, G1_node, self.core_1, G1_succ) and
+                self.two_hop_succ(self.G2, G2_node, self.core_2, G2_succ)):
+            return False
+
+        return True
