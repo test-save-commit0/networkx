@@ -98,7 +98,38 @@ def vf2pp_isomorphism(G1, G2, node_label=None, default_label=None):
     dict or None
         Node mapping if the two graphs are isomorphic. None otherwise.
     """
-    pass
+    if len(G1) != len(G2):
+        return None
+
+    G1_degree = {n: G1.degree(n) for n in G1}
+    G2_degree = {n: G2.degree(n) for n in G2}
+
+    graph_params = _initialize_parameters(G1, G2, G2_degree, node_label, default_label)
+    node_order = _matching_order(graph_params)
+
+    state_params = _StateParameters({}, {}, set(), set(), set(), set(), set(), set(), set(), set())
+    stack = []
+
+    for u in node_order:
+        candidates = _find_candidates(u, graph_params, state_params, G1_degree)
+        if not candidates:
+            if not stack:
+                return None
+            u, _ = stack.pop()
+            _restore_Tinout(u, state_params.mapping[u], graph_params, state_params)
+            del state_params.reverse_mapping[state_params.mapping[u]]
+            del state_params.mapping[u]
+        else:
+            v = candidates.pop()
+            stack.append((u, candidates))
+            state_params.mapping[u] = v
+            state_params.reverse_mapping[v] = u
+            _update_Tinout(u, v, graph_params, state_params)
+
+        if len(state_params.mapping) == len(G1):
+            return state_params.mapping
+
+    return None
 
 
 @nx._dispatchable(graphs={'G1': 0, 'G2': 1}, node_attrs={'node_label':
@@ -126,7 +157,7 @@ def vf2pp_is_isomorphic(G1, G2, node_label=None, default_label=None):
     bool
         True if the two graphs are isomorphic, False otherwise.
     """
-    pass
+    return vf2pp_isomorphism(G1, G2, node_label, default_label) is not None
 
 
 @nx._dispatchable(graphs={'G1': 0, 'G2': 1}, node_attrs={'node_label':
@@ -154,11 +185,45 @@ def vf2pp_all_isomorphisms(G1, G2, node_label=None, default_label=None):
     dict
         Isomorphic mapping between the nodes in `G1` and `G2`.
     """
-    pass
+    if len(G1) != len(G2):
+        return
+
+    G1_degree = {n: G1.degree(n) for n in G1}
+    G2_degree = {n: G2.degree(n) for n in G2}
+
+    graph_params = _initialize_parameters(G1, G2, G2_degree, node_label, default_label)
+    node_order = _matching_order(graph_params)
+
+    state_params = _StateParameters({}, {}, set(), set(), set(), set(), set(), set(), set(), set())
+    stack = []
+
+    for u in node_order:
+        candidates = _find_candidates(u, graph_params, state_params, G1_degree)
+        while candidates:
+            v = candidates.pop()
+            stack.append((u, candidates))
+            state_params.mapping[u] = v
+            state_params.reverse_mapping[v] = u
+            _update_Tinout(u, v, graph_params, state_params)
+
+            if len(state_params.mapping) == len(G1):
+                yield state_params.mapping.copy()
+                u, candidates = stack.pop()
+                _restore_Tinout(u, state_params.mapping[u], graph_params, state_params)
+                del state_params.reverse_mapping[state_params.mapping[u]]
+                del state_params.mapping[u]
+            else:
+                break
+        else:
+            if not stack:
+                return
+            u, candidates = stack.pop()
+            _restore_Tinout(u, state_params.mapping[u], graph_params, state_params)
+            del state_params.reverse_mapping[state_params.mapping[u]]
+            del state_params.mapping[u]
 
 
-def _initialize_parameters(G1, G2, G2_degree, node_label=None, default_label=-1
-    ):
+def _initialize_parameters(G1, G2, G2_degree, node_label=None, default_label=-1):
     """Initializes all the necessary parameters for VF2++
 
     Parameters
@@ -193,7 +258,24 @@ def _initialize_parameters(G1, G2, G2_degree, node_label=None, default_label=-1
         T1_out, T2_out: set
             Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
     """
-    pass
+    G1_labels = {node: G1.nodes[node].get(node_label, default_label) for node in G1}
+    G2_labels = {node: G2.nodes[node].get(node_label, default_label) for node in G2}
+
+    nodes_of_G1Labels = collections.defaultdict(set)
+    for node, label in G1_labels.items():
+        nodes_of_G1Labels[label].add(node)
+
+    nodes_of_G2Labels = collections.defaultdict(set)
+    for node, label in G2_labels.items():
+        nodes_of_G2Labels[label].add(node)
+
+    G2_nodes_of_degree = collections.defaultdict(set)
+    for node, degree in G2_degree.items():
+        G2_nodes_of_degree[degree].add(node)
+
+    graph_params = _GraphParameters(G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, G2_nodes_of_degree)
+
+    return graph_params
 
 
 def _matching_order(graph_params):
@@ -222,7 +304,12 @@ def _matching_order(graph_params):
     node_order: list
         The ordering of the nodes.
     """
-    pass
+    G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, _ = graph_params
+
+    label_frequency = {label: len(nodes) for label, nodes in nodes_of_G2Labels.items()}
+    node_order = sorted(G1.nodes(), key=lambda n: (label_frequency[G1_labels[n]], -G1.degree(n)))
+
+    return node_order
 
 
 def _find_candidates(u, graph_params, state_params, G1_degree):
@@ -263,7 +350,21 @@ def _find_candidates(u, graph_params, state_params, G1_degree):
     candidates: set
         The nodes from G2 which are candidates for u.
     """
-    pass
+    G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, G2_nodes_of_degree = graph_params
+    mapping, reverse_mapping, T1, T1_in, T1_tilde, T1_tilde_in, T2, T2_in, T2_tilde, T2_tilde_in = state_params
+
+    candidates = set()
+
+    if u in T1:
+        candidates = T2
+    elif u in T1_tilde:
+        candidates = T2_tilde
+    else:
+        label = G1_labels[u]
+        degree = G1_degree[u]
+        candidates = nodes_of_G2Labels[label] & G2_nodes_of_degree[degree]
+
+    return candidates - set(reverse_mapping.keys())
 
 
 def _feasibility(node1, node2, graph_params, state_params):
@@ -308,7 +409,7 @@ def _feasibility(node1, node2, graph_params, state_params):
     -------
     True if all checks are successful, False otherwise.
     """
-    pass
+    return _consistent_PT(node1, node2, graph_params, state_params) and not _cut_PT(node1, node2, graph_params, state_params)
 
 
 def _cut_PT(u, v, graph_params, state_params):
@@ -348,7 +449,24 @@ def _cut_PT(u, v, graph_params, state_params):
     -------
     True if we should prune this branch, i.e. the node pair failed the cutting checks. False otherwise.
     """
-    pass
+    G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, _ = graph_params
+    mapping, reverse_mapping, T1, T1_in, T1_tilde, T1_tilde_in, T2, T2_in, T2_tilde, T2_tilde_in = state_params
+
+    # Check label compatibility
+    if G1_labels[u] != G2_labels[v]:
+        return True
+
+    # Check degree compatibility
+    if G1.degree(u) != G2.degree(v):
+        return True
+
+    # Check neighbor label compatibility
+    u_neighbor_labels = {G1_labels[n] for n in G1.neighbors(u)}
+    v_neighbor_labels = {G2_labels[n] for n in G2.neighbors(v)}
+    if u_neighbor_labels != v_neighbor_labels:
+        return True
+
+    return False
 
 
 def _consistent_PT(u, v, graph_params, state_params):
@@ -388,7 +506,19 @@ def _consistent_PT(u, v, graph_params, state_params):
     -------
     True if the pair passes all the consistency checks successfully. False otherwise.
     """
-    pass
+    G1, G2, G1_labels, G2_labels, nodes_of_G1Labels, nodes_of_G2Labels, _ = graph_params
+    mapping, reverse_mapping, T1, T1_in, T1_tilde, T1_tilde_in, T2, T2_in, T2_tilde, T2_tilde_in = state_params
+
+    # Check if the nodes are already mapped
+    if u in mapping or v in reverse_mapping:
+        return False
+
+    # Check connectivity consistency
+    for n1, n2 in mapping.items():
+        if (G1.has_edge(u, n1) != G2.has_edge(v, n2)):
+            return False
+
+    return True
 
 
 def _update_Tinout(new_node1, new_node2, graph_params, state_params):
@@ -467,4 +597,21 @@ def _restore_Tinout(popped_node1, popped_node2, graph_params, state_params):
         T1_tilde, T2_tilde: set
             Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
     """
-    pass
+    G1, G2 = graph_params.G1, graph_params.G2
+    mapping, reverse_mapping, T1, T1_in, T1_tilde, T1_tilde_in, T2, T2_in, T2_tilde, T2_tilde_in = state_params
+
+    # Restore T1 and T1_tilde
+    T1_tilde.add(popped_node1)
+    for neighbor in G1.neighbors(popped_node1):
+        if neighbor not in mapping:
+            if all(mapped_neighbor not in G1.neighbors(neighbor) for mapped_neighbor in mapping):
+                T1.discard(neighbor)
+                T1_tilde.add(neighbor)
+
+    # Restore T2 and T2_tilde
+    T2_tilde.add(popped_node2)
+    for neighbor in G2.neighbors(popped_node2):
+        if neighbor not in reverse_mapping:
+            if all(mapped_neighbor not in G2.neighbors(neighbor) for mapped_neighbor in reverse_mapping):
+                T2.discard(neighbor)
+                T2_tilde.add(neighbor)
