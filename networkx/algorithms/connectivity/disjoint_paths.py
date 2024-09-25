@@ -138,7 +138,46 @@ def edge_disjoint_paths(G, s, t, flow_func=None, cutoff=None, auxiliary=
     package.
 
     """
-    pass
+    if auxiliary is None:
+        H = build_auxiliary_edge_connectivity(G)
+    else:
+        H = auxiliary
+
+    # The edge connectivity algorithm uses an auxiliary digraph.
+    # H has a graph attribute mapping with a dict mapping node
+    # names in G and in H
+    mapping = H.graph['mapping']
+    if (s not in mapping) or (t not in mapping):
+        raise nx.NetworkXError('node %s or %s not in graph' % (s, t))
+    
+    # Maximum flow algorithm
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    # Compute maximum flow between source and target
+    R = flow_func(H, mapping[s], mapping[t], capacity='capacity',
+                  residual=residual, cutoff=cutoff, value_only=False)
+
+    # Saturated edges in the residual network correspond to edge disjoint paths
+    # between source and target in the original graph.
+    cutset = [(u, v) for (u, v, d) in R.edges(data=True)
+              if d['flow'] == d['capacity']]
+
+    # Rebuild the edge disjoint paths from the cutset
+    paths_found = []
+    H_copy = H.copy()
+    for u, v in cutset:
+        path = [mapping[u], mapping[v]]
+        H_copy.remove_edge(u, v)
+        while path[0] != mapping[s]:
+            prev = [e[0] for e in H_copy.in_edges(path[0])]
+            path.insert(0, mapping[prev[0]])
+        while path[-1] != mapping[t]:
+            succ = [e[1] for e in H_copy.out_edges(path[-1])]
+            path.append(mapping[succ[0]])
+        paths_found.append(path)
+
+    return _unique_everseen(paths_found)
 
 
 @nx._dispatchable(graphs={'G': 0, 'auxiliary?': 5}, preserve_node_attrs={
@@ -264,9 +303,65 @@ def node_disjoint_paths(G, s, t, flow_func=None, cutoff=None, auxiliary=
     :meth:`shortest_augmenting_path`
 
     """
-    pass
+    if auxiliary is None:
+        H = build_auxiliary_node_connectivity(G)
+    else:
+        H = auxiliary
+
+    # The node connectivity algorithm uses an auxiliary digraph.
+    # H has a graph attribute mapping with a dict mapping node
+    # names in G and in H
+    mapping = H.graph['mapping']
+    if (s not in mapping) or (t not in mapping):
+        raise nx.NetworkXError('node %s or %s not in graph' % (s, t))
+
+    # Maximum flow algorithm
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    # Compute maximum flow between source and target
+    R = flow_func(H, f'{mapping[s]}B', f'{mapping[t]}A', capacity='capacity',
+                  residual=residual, cutoff=cutoff, value_only=False)
+
+    # Saturated edges in the residual network correspond to node disjoint paths
+    # between source and target in the original graph.
+    cutset = [(u, v) for (u, v, d) in R.edges(data=True)
+              if d['flow'] == d['capacity']]
+
+    # Rebuild the node disjoint paths from the cutset
+    paths_found = []
+    H_copy = H.copy()
+    for u, v in cutset:
+        path = []
+        if v.endswith('A'):  # We have reached the target
+            path = [mapping[v[:-1]]]
+        else:
+            path = [mapping[u[:-1]], mapping[v[:-1]]]
+        H_copy.remove_edge(u, v)
+        
+        # Extend the path to source
+        curr = u
+        while not curr.endswith('B'):
+            prev = [e[0] for e in H_copy.in_edges(curr)][0]
+            path.insert(0, mapping[prev[:-1]])
+            curr = prev
+        
+        # Extend the path to target
+        curr = v
+        while not curr.endswith('A'):
+            succ = [e[1] for e in H_copy.out_edges(curr)][0]
+            path.append(mapping[succ[:-1]])
+            curr = succ
+        
+        paths_found.append(path)
+
+    return _unique_everseen(paths_found)
 
 
 def _unique_everseen(iterable):
     """List unique elements, preserving order. Remember all elements ever seen."""
-    pass
+    seen = set()
+    for element in iterable:
+        if element not in seen:
+            seen.add(element)
+            yield element
