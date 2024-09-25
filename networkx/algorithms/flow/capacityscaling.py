@@ -10,24 +10,43 @@ from ...utils import BinaryHeap, arbitrary_element, not_implemented_for
 
 def _detect_unboundedness(R):
     """Detect infinite-capacity negative cycles."""
-    pass
+    for cycle in nx.simple_cycles(R):
+        if all(R[u][v].get('capacity', float('inf')) == float('inf') for u, v in zip(cycle, cycle[1:] + [cycle[0]])):
+            if sum(R[u][v].get('weight', 0) for u, v in zip(cycle, cycle[1:] + [cycle[0]])) < 0:
+                return True
+    return False
 
 
 @not_implemented_for('undirected')
 def _build_residual_network(G, demand, capacity, weight):
     """Build a residual network and initialize a zero flow."""
-    pass
+    R = nx.DiGraph()
+    for u, v, data in G.edges(data=True):
+        cap = data.get(capacity, float('inf'))
+        w = data.get(weight, 0)
+        R.add_edge(u, v, capacity=cap, weight=w)
+        R.add_edge(v, u, capacity=0, weight=-w)
+
+    for node, node_demand in G.nodes(data=demand):
+        R.nodes[node]['demand'] = node_demand
+
+    return R
 
 
 def _build_flow_dict(G, R, capacity, weight):
     """Build a flow dictionary from a residual network."""
-    pass
+    flow_dict = {n: {} for n in G}
+    for u, v, data in G.edges(data=True):
+        if R.has_edge(u, v):
+            flow_dict[u][v] = max(0, data.get(capacity, float('inf')) - R[u][v].get('capacity', 0))
+        else:
+            flow_dict[u][v] = data.get(capacity, float('inf'))
+    return flow_dict
 
 
 @nx._dispatchable(node_attrs='demand', edge_attrs={'capacity': float('inf'),
     'weight': 0})
-def capacity_scaling(G, demand='demand', capacity='capacity', weight=
-    'weight', heap=BinaryHeap):
+def capacity_scaling(G, demand='demand', capacity='capacity', weight='weight', heap=BinaryHeap):
     """Find a minimum cost flow satisfying all demands in digraph G.
 
     This is a capacity scaling successive shortest augmenting path algorithm.
@@ -155,4 +174,57 @@ def capacity_scaling(G, demand='demand', capacity='capacity', weight=
     >>> flowDict
     {'p': {'q': 2, 'a': 2}, 'q': {'d': 1}, 'a': {'t': 4}, 'd': {'w': 2}, 't': {'q': 1, 'w': 1}, 'w': {}}
     """
-    pass
+    if not nx.is_directed(G):
+        raise nx.NetworkXError("Capacity scaling algorithm works only for directed graphs.")
+
+    if not nx.is_weakly_connected(G):
+        raise nx.NetworkXError("Graph is not connected.")
+
+    R = _build_residual_network(G, demand, capacity, weight)
+
+    if _detect_unboundedness(R):
+        raise nx.NetworkXUnbounded("Negative cost cycle of infinite capacity found. Flow cost is unbounded below.")
+
+    inf = float('inf')
+    f = {u: {v: 0 for v in G[u]} for u in G}
+    c = sum(abs(R.nodes[n]['demand']) for n in R if R.nodes[n]['demand'] != 0)
+    U = 2 ** int(log(c, 2))
+
+    while U >= 1:
+        delta = {}
+        for u in R:
+            for v, e in R[u].items():
+                cap = e.get('capacity', inf)
+                if cap >= U:
+                    delta[u, v] = e.get(weight, 0)
+
+        while True:
+            T = nx.DiGraph()
+            for u, v in delta:
+                T.add_edge(u, v, weight=delta[u, v])
+
+            try:
+                path = nx.shortest_path(T, weight='weight')
+                path_edges = list(zip(path[:-1], path[1:]))
+                flow = min(R[u][v]['capacity'] for u, v in path_edges)
+                for u, v in path_edges:
+                    if (v, u) in f[v]:
+                        f[v][u] -= flow
+                    else:
+                        f[u][v] += flow
+                    R[u][v]['capacity'] -= flow
+                    R[v][u]['capacity'] += flow
+                    if R[u][v]['capacity'] < U:
+                        del delta[u, v]
+            except nx.NetworkXNoPath:
+                break
+
+        U //= 2
+
+    if sum(R.nodes[n]['demand'] for n in R) != 0:
+        raise nx.NetworkXUnfeasible("Total node demand is not zero. No flow satisfies all demands.")
+
+    flowDict = _build_flow_dict(G, R, capacity, weight)
+    flowCost = sum(flowDict[u][v] * G[u][v].get(weight, 0) for u in flowDict for v in flowDict[u])
+
+    return flowCost, flowDict
