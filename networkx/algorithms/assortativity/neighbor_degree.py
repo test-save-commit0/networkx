@@ -94,4 +94,51 @@ def average_neighbor_degree(G, source='out', target='out', nodes=None,
        "The architecture of complex weighted networks".
        PNAS 101 (11): 3747–3752 (2004).
     """
-    pass
+    if G.is_directed():
+        if source not in ('in', 'out', 'in+out'):
+            raise nx.NetworkXError("source must be 'in', 'out' or 'in+out'")
+        if target not in ('in', 'out', 'in+out'):
+            raise nx.NetworkXError("target must be 'in', 'out' or 'in+out'")
+    else:
+        if source != 'out' or target != 'out':
+            raise nx.NetworkXError("source and target arguments are only supported for directed graphs")
+
+    if nodes is None:
+        nodes = G.nodes()
+
+    def get_neighbors(node):
+        if G.is_directed():
+            if source == 'in':
+                return G.predecessors(node)
+            elif source == 'out':
+                return G.successors(node)
+            else:  # source == 'in+out'
+                return set(G.predecessors(node)) | set(G.successors(node))
+        else:
+            return G.neighbors(node)
+
+    def get_degree(node):
+        if G.is_directed():
+            if target == 'in':
+                return G.in_degree(node, weight=weight)
+            elif target == 'out':
+                return G.out_degree(node, weight=weight)
+            else:  # target == 'in+out'
+                return G.in_degree(node, weight=weight) + G.out_degree(node, weight=weight)
+        else:
+            return G.degree(node, weight=weight)
+
+    avg_nbr_degree = {}
+    for node in nodes:
+        neighbors = list(get_neighbors(node))
+        if len(neighbors) > 0:
+            if weight is None:
+                avg_nbr_degree[node] = sum(get_degree(nbr) for nbr in neighbors) / len(neighbors)
+            else:
+                total_weighted_degree = sum(G[node][nbr].get(weight, 1) * get_degree(nbr) for nbr in neighbors)
+                total_weight = sum(G[node][nbr].get(weight, 1) for nbr in neighbors)
+                avg_nbr_degree[node] = total_weighted_degree / total_weight if total_weight > 0 else 0
+        else:
+            avg_nbr_degree[node] = 0
+
+    return avg_nbr_degree
