@@ -86,7 +86,44 @@ def current_flow_betweenness_centrality_subset(G, sources, targets,
     .. [2] A measure of betweenness centrality based on random walks,
        M. E. J. Newman, Social Networks 27, 39-54 (2005).
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+    from scipy.sparse import linalg
+
+    if G.is_directed():
+        raise nx.NetworkXError("Current flow betweenness centrality not defined for directed graphs.")
+
+    n = G.number_of_nodes()
+    if normalized and n <= 2:
+        return dict.fromkeys(G, 0.0)
+
+    nodelist = list(G)
+    A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, dtype=dtype, format='csc')
+    L = sparse.csgraph.laplacian(A, normed=False)
+    C = sparse.csgraph.laplacian(A, normed=True)
+
+    betweenness = dict.fromkeys(nodelist, 0.0)
+    for s in sources:
+        for t in targets:
+            if s == t:
+                continue
+            row = flow_matrix_row(L, C, s, t, solver=solver, dtype=dtype)
+            pos = dict(zip(nodelist, range(n)))
+            for u in G:
+                if u in (s, t):
+                    continue
+                ubetw = 0
+                for v in G[u]:
+                    i, j = pos[u], pos[v]
+                    ubetw += abs(row[i] - row[j]) * G[u][v].get(weight, 1)
+                betweenness[u] += ubetw
+
+    if normalized:
+        nb = (n - 1) * (n - 2)
+        for v in betweenness:
+            betweenness[v] /= nb
+
+    return betweenness
 
 
 @not_implemented_for('directed')
@@ -169,4 +206,36 @@ def edge_current_flow_betweenness_centrality_subset(G, sources, targets,
     .. [2] A measure of betweenness centrality based on random walks,
        M. E. J. Newman, Social Networks 27, 39-54 (2005).
     """
-    pass
+    import numpy as np
+    from scipy import sparse
+    from scipy.sparse import linalg
+
+    if G.is_directed():
+        raise nx.NetworkXError("Current flow betweenness centrality not defined for directed graphs.")
+
+    n = G.number_of_nodes()
+    if normalized and n <= 2:
+        return dict.fromkeys(G.edges(), 0.0)
+
+    nodelist = list(G)
+    A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, dtype=dtype, format='csc')
+    L = sparse.csgraph.laplacian(A, normed=False)
+    C = sparse.csgraph.laplacian(A, normed=True)
+
+    betweenness = dict.fromkeys(G.edges(), 0.0)
+    for s in sources:
+        for t in targets:
+            if s == t:
+                continue
+            row = flow_matrix_row(L, C, s, t, solver=solver, dtype=dtype)
+            pos = dict(zip(nodelist, range(n)))
+            for u, v in G.edges():
+                i, j = pos[u], pos[v]
+                betweenness[(u, v)] += abs(row[i] - row[j]) * G[u][v].get(weight, 1)
+
+    if normalized:
+        nb = (n - 1) * (n - 2)
+        for edge in betweenness:
+            betweenness[edge] /= nb
+
+    return betweenness
