@@ -37,7 +37,31 @@ __all__ = ['GraphMatcher', 'DiGraphMatcher', 'MultiGraphMatcher',
 
 def _semantic_feasibility(self, G1_node, G2_node):
     """Returns True if mapping G1_node to G2_node is semantically feasible."""
-    pass
+    # Check if the nodes match based on their attributes
+    if self.node_match is not None and not self.node_match(self.G1.nodes[G1_node], self.G2.nodes[G2_node]):
+        return False
+
+    # Check if the edges match based on their attributes
+    for neighbor in self.G1_adj[G1_node]:
+        if neighbor in self.core_1:
+            if self.core_1[neighbor] not in self.G2_adj[G2_node]:
+                return False
+            if self.edge_match is not None:
+                for edge in self.G1.edges[G1_node, neighbor].values():
+                    if not any(self.edge_match(edge, e2) for e2 in self.G2.edges[G2_node, self.core_1[neighbor]].values()):
+                        return False
+
+    # Check for any edges in G2 that don't have a match in G1
+    for neighbor in self.G2_adj[G2_node]:
+        if neighbor in self.core_2:
+            if self.core_2[neighbor] not in self.G1_adj[G1_node]:
+                return False
+            if self.edge_match is not None:
+                for edge in self.G2.edges[G2_node, neighbor].values():
+                    if not any(self.edge_match(e1, edge) for e1 in self.G1.edges[G1_node, self.core_2[neighbor]].values()):
+                        return False
+
+    return True
 
 
 class GraphMatcher(vf2.GraphMatcher):
@@ -126,7 +150,40 @@ class DiGraphMatcher(vf2.DiGraphMatcher):
 
     def semantic_feasibility(self, G1_node, G2_node):
         """Returns True if mapping G1_node to G2_node is semantically feasible."""
-        pass
+        # Check if the nodes match based on their attributes
+        if self.node_match is not None and not self.node_match(self.G1.nodes[G1_node], self.G2.nodes[G2_node]):
+            return False
+
+        # Check outgoing edges
+        for successor in self.G1.successors(G1_node):
+            if successor in self.core_1:
+                if self.core_1[successor] not in self.G2.successors(G2_node):
+                    return False
+                if self.edge_match is not None:
+                    if not self.edge_match(self.G1[G1_node][successor], self.G2[G2_node][self.core_1[successor]]):
+                        return False
+
+        # Check incoming edges
+        for predecessor in self.G1.predecessors(G1_node):
+            if predecessor in self.core_1:
+                if self.core_1[predecessor] not in self.G2.predecessors(G2_node):
+                    return False
+                if self.edge_match is not None:
+                    if not self.edge_match(self.G1[predecessor][G1_node], self.G2[self.core_1[predecessor]][G2_node]):
+                        return False
+
+        # Check for any edges in G2 that don't have a match in G1
+        for successor in self.G2.successors(G2_node):
+            if successor in self.core_2:
+                if self.core_2[successor] not in self.G1.successors(G1_node):
+                    return False
+
+        for predecessor in self.G2.predecessors(G2_node):
+            if predecessor in self.core_2:
+                if self.core_2[predecessor] not in self.G1.predecessors(G1_node):
+                    return False
+
+        return True
 
 
 class MultiGraphMatcher(GraphMatcher):
