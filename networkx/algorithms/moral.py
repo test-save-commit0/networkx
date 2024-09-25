@@ -49,4 +49,11 @@ def moral_graph(G):
            In Proceedings of the Eleventh conference on Uncertainty
            in artificial intelligence (UAI'95)
     """
-    pass
+    H = G.to_undirected()
+    
+    for node in G:
+        parents = list(G.predecessors(node))
+        if len(parents) > 1:
+            H.add_edges_from(itertools.combinations(parents, 2))
+    
+    return H
