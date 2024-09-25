@@ -60,7 +60,20 @@ def find_asteroidal_triple(G):
        Journal of Discrete Algorithms 2, pages 439-452, 2004.
        https://www.sciencedirect.com/science/article/pii/S157086670400019X
     """
-    pass
+    component_structure = create_component_structure(G)
+    nodes = list(G.nodes())
+    n = len(nodes)
+    
+    for i in range(n):
+        for j in range(i + 1, n):
+            for k in range(j + 1, n):
+                u, v, w = nodes[i], nodes[j], nodes[k]
+                if not G.has_edge(u, v) and not G.has_edge(v, w) and not G.has_edge(w, u):
+                    if (component_structure[u][v] == component_structure[u][w] and
+                        component_structure[v][u] == component_structure[v][w] and
+                        component_structure[w][u] == component_structure[w][v]):
+                        return [u, v, w]
+    return None
 
 
 @not_implemented_for('directed')
@@ -94,7 +107,7 @@ def is_at_free(G):
     >>> nx.is_at_free(G)
     False
     """
-    pass
+    return find_asteroidal_triple(G) is None
 
 
 @not_implemented_for('directed')
@@ -124,4 +137,15 @@ def create_component_structure(G):
         A dictionary of dictionaries, keyed by pairs of vertices.
 
     """
-    pass
+    component_structure = {u: {} for u in G}
+    for u in G:
+        closed_neighborhood = set(G[u]) | {u}
+        subgraph = G.subgraph([n for n in G if n not in closed_neighborhood])
+        components = list(nx.connected_components(subgraph))
+        for i, component in enumerate(components, start=1):
+            for v in component:
+                component_structure[u][v] = i
+        for v in closed_neighborhood:
+            if v != u:
+                component_structure[u][v] = 0
+    return component_structure
