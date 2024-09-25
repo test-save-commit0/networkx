@@ -94,7 +94,16 @@ def betweenness_centrality_subset(G, sources, targets, normalized=False,
        Social Networks 30(2):136-145, 2008.
        https://doi.org/10.1016/j.socnet.2007.11.001
     """
-    pass
+    betweenness = dict.fromkeys(G, 0.0)
+    for s in sources:
+        if weight is None:
+            S, P, sigma = shortest_path(G, s)
+        else:
+            S, P, sigma = dijkstra(G, s, weight)
+        betweenness = _accumulate_basic(betweenness, S, P, sigma, s, targets)
+    # rescaling
+    betweenness = _rescale(betweenness, len(G), normalized, G.is_directed())
+    return betweenness
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -166,19 +175,72 @@ def edge_betweenness_centrality_subset(G, sources, targets, normalized=
        Social Networks 30(2):136-145, 2008.
        https://doi.org/10.1016/j.socnet.2007.11.001
     """
-    pass
+    betweenness = dict.fromkeys(G.edges(), 0.0)
+    for s in sources:
+        if weight is None:
+            S, P, sigma = shortest_path(G, s)
+        else:
+            S, P, sigma = dijkstra(G, s, weight)
+        betweenness = _accumulate_edges_subset(betweenness, S, P, sigma, s, targets)
+    betweenness = _add_edge_keys(G, betweenness)
+    # rescaling
+    for n in G:
+        for key in betweenness[n]:
+            betweenness[n][key] *= 0.5
+    betweenness = _rescale_e(betweenness, len(G), normalized, G.is_directed())
+    return betweenness
 
 
 def _accumulate_edges_subset(betweenness, S, P, sigma, s, targets):
     """edge_betweenness_centrality_subset helper."""
-    pass
+    delta = dict.fromkeys(S, 0)
+    while S:
+        w = S.pop()
+        coeff = (1 + delta[w]) / sigma[w]
+        for v in P[w]:
+            c = sigma[v] * coeff
+            if (v, w) not in betweenness:
+                betweenness[(w, v)] += c
+            else:
+                betweenness[(v, w)] += c
+            delta[v] += c
+        if w in targets:
+            delta[w] += 1
+    return betweenness
 
 
 def _rescale(betweenness, n, normalized, directed=False):
     """betweenness_centrality_subset helper."""
-    pass
+    if normalized:
+        if n <= 2:
+            scale = None  # no normalization
+        else:
+            scale = 1 / ((n - 1) * (n - 2))
+    else:
+        scale = 1
+    if scale is not None:
+        if directed:
+            scale *= 1
+        else:
+            scale *= 2
+        for v in betweenness:
+            betweenness[v] *= scale
+    return betweenness
 
 
 def _rescale_e(betweenness, n, normalized, directed=False):
     """edge_betweenness_centrality_subset helper."""
-    pass
+    if normalized:
+        if n <= 1:
+            scale = None  # no normalization
+        else:
+            scale = 1 / (n * (n - 1))
+    else:
+        scale = 1
+    if scale is not None:
+        if not directed:
+            scale *= 2
+        for v in betweenness:
+            for k in betweenness[v]:
+                betweenness[v][k] *= scale
+    return betweenness
