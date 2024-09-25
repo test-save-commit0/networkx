@@ -96,4 +96,46 @@ def laplacian_centrality(G, normalized=True, nodelist=None, weight='weight',
     :func:`~networkx.linalg.laplacianmatrix.directed_laplacian_matrix`
     :func:`~networkx.linalg.laplacianmatrix.laplacian_matrix`
     """
-    pass
+    import numpy as np
+
+    if len(G) == 0:
+        raise nx.NetworkXPointlessConcept("Cannot compute centrality for the null graph.")
+
+    if nodelist is None:
+        nodelist = list(G)
+
+    if G.is_directed():
+        L = nx.directed_laplacian_matrix(G, nodelist=nodelist, weight=weight,
+                                         walk_type=walk_type, alpha=alpha)
+    else:
+        L = nx.laplacian_matrix(G, nodelist=nodelist, weight=weight)
+
+    L = L.astype(float)
+    eigenvalues = np.linalg.eigvalsh(L.toarray())
+    laplacian_energy = np.sum(eigenvalues ** 2)
+
+    if laplacian_energy == 0:
+        raise ZeroDivisionError("Graph has no edges, cannot compute Laplacian centrality.")
+
+    centralities = {}
+    for node in nodelist:
+        G_minus_node = G.copy()
+        G_minus_node.remove_node(node)
+        
+        if G_minus_node.is_directed():
+            L_minus_node = nx.directed_laplacian_matrix(G_minus_node, weight=weight,
+                                                        walk_type=walk_type, alpha=alpha)
+        else:
+            L_minus_node = nx.laplacian_matrix(G_minus_node, weight=weight)
+        
+        L_minus_node = L_minus_node.astype(float)
+        eigenvalues_minus_node = np.linalg.eigvalsh(L_minus_node.toarray())
+        laplacian_energy_minus_node = np.sum(eigenvalues_minus_node ** 2)
+        
+        centralities[node] = laplacian_energy - laplacian_energy_minus_node
+
+    if normalized:
+        norm = sum(centralities.values())
+        centralities = {node: value / norm for node, value in centralities.items()}
+
+    return centralities
