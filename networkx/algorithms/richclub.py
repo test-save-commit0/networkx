@@ -81,7 +81,22 @@ def rich_club_coefficient(G, normalized=True, Q=100, seed=None):
        "Uniform generation of random graphs with arbitrary degree
        sequences", 2006. https://arxiv.org/abs/cond-mat/0312028
     """
-    pass
+    if len(G) < 4 and normalized:
+        raise nx.NetworkXError("Graph has fewer than four nodes.")
+    
+    rc = _compute_rc(G)
+    
+    if normalized:
+        # Create a random graph with the same degree sequence for normalization
+        R = nx.configuration_model(list(d for n, d in G.degree()), seed=seed)
+        R = nx.Graph(R)  # Remove parallel edges
+        R.remove_edges_from(nx.selfloop_edges(R))  # Remove self-loops
+        
+        rc_R = _compute_rc(R)
+        
+        rc = {k: v / rc_R[k] if rc_R[k] > 0 else 0 for k, v in rc.items()}
+    
+    return rc
 
 
 def _compute_rc(G):
@@ -94,4 +109,24 @@ def _compute_rc(G):
     that degree.
 
     """
-    pass
+    degrees = [d for n, d in G.degree()]
+    max_degree = max(degrees)
+    nodes = G.number_of_nodes()
+    
+    # Count how many nodes have degree greater than k
+    Nk = [nodes - i for i, _ in enumerate(accumulate(degrees.count(d) for d in range(max_degree + 1)))]
+    
+    # Count number of edges for nodes with degree greater than k
+    Ek = [G.number_of_edges()]
+    for k in range(1, max_degree + 1):
+        Ek.append(sum(1 for u, v in G.edges() if G.degree(u) > k and G.degree(v) > k))
+    
+    # Compute rich-club coefficient for each degree
+    rc = {}
+    for k in range(max_degree + 1):
+        if Nk[k] > 1:
+            rc[k] = (2 * Ek[k]) / (Nk[k] * (Nk[k] - 1))
+        else:
+            rc[k] = 0
+    
+    return rc
