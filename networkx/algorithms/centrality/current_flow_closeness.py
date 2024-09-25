@@ -7,8 +7,7 @@ __all__ = ['current_flow_closeness_centrality', 'information_centrality']
 
 @not_implemented_for('directed')
 @nx._dispatchable(edge_attrs='weight')
-def current_flow_closeness_centrality(G, weight=None, dtype=float, solver='lu'
-    ):
+def current_flow_closeness_centrality(G, weight=None, dtype=float, solver='lu'):
     """Compute current-flow closeness centrality for nodes.
 
     Current-flow closeness centrality is variant of closeness
@@ -63,7 +62,31 @@ def current_flow_closeness_centrality(G, weight=None, dtype=float, solver='lu'
        Social Networks 11(1):1-37, 1989.
        https://doi.org/10.1016/0378-8733(89)90016-6
     """
-    pass
+    import numpy as np
+
+    if G.is_directed():
+        raise nx.NetworkXError("Current flow closeness centrality not defined for directed graphs.")
+
+    if solver == 'full':
+        solver = FullInverseLaplacian(G, weight=weight, dtype=dtype)
+    elif solver == 'lu':
+        solver = SuperLUInverseLaplacian(G, weight=weight, dtype=dtype)
+    elif solver == 'cg':
+        solver = CGInverseLaplacian(G, weight=weight, dtype=dtype)
+    else:
+        raise nx.NetworkXError("Unknown solver: %s" % solver)
+
+    n = G.number_of_nodes()
+    ordering = list(reverse_cuthill_mckee_ordering(G))
+    L = solver.L.tocsr()
+
+    centrality = {}
+    for node in G:
+        row = ordering.index(node)
+        T = sum(L[row, ordering.index(other)] for other in G)
+        centrality[node] = (n - 1) / T if T != 0 else 0.0
+
+    return centrality
 
 
 information_centrality = current_flow_closeness_centrality
