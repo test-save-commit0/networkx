@@ -81,7 +81,38 @@ def edge_boundary(G, nbunch1, nbunch2=None, data=False, keys=False, default
     the interest of speed and generality, that is not required here.
 
     """
-    pass
+    nset1 = set(n for n in nbunch1 if n in G)
+    if nbunch2 is None:
+        nset2 = set(G) - nset1
+    else:
+        nset2 = set(n for n in nbunch2 if n in G)
+    
+    bdy_edges = ((n1, n2) for n1 in nset1 for n2 in G[n1] if n2 in nset2)
+    
+    if G.is_multigraph():
+        if keys:
+            if data:
+                return ((n1, n2, k, d if d != {} else default)
+                        for n1, n2 in bdy_edges
+                        for k, d in G[n1][n2].items())
+            else:
+                return ((n1, n2, k) for n1, n2 in bdy_edges
+                        for k in G[n1][n2])
+        elif data:
+            return ((n1, n2, d if d != {} else default)
+                    for n1, n2 in bdy_edges
+                    for d in G[n1][n2].values())
+        else:
+            return bdy_edges
+    else:
+        if data:
+            if G.is_directed():
+                return ((n1, n2, G[n1][n2] if G[n1][n2] != {} else default)
+                        for n1, n2 in bdy_edges)
+            else:
+                return ((n1, n2, G[n1].get(n2, default)) for n1, n2 in bdy_edges)
+        else:
+            return bdy_edges
 
 
 @nx._dispatchable
@@ -136,4 +167,12 @@ def node_boundary(G, nbunch1, nbunch2=None):
     the interest of speed and generality, that is not required here.
 
     """
-    pass
+    nset1 = set(n for n in nbunch1 if n in G)
+    bdy = set()
+    for n1 in nset1:
+        bdy.update(n for n in G[n1] if n not in nset1)
+    
+    if nbunch2 is not None:
+        bdy &= set(nbunch2)
+    
+    return bdy
