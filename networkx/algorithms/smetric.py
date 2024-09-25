@@ -33,4 +33,15 @@ def s_metric(G, **kwargs):
            Definition, Properties, and  Implications (Extended Version), 2005.
            https://arxiv.org/abs/cond-mat/0501169
     """
-    pass
+    if 'normalized' in kwargs:
+        import warnings
+        warnings.warn("The 'normalized' keyword argument is deprecated and will be removed in the future",
+                      DeprecationWarning, stacklevel=2)
+    
+    s = sum(G.degree(u) * G.degree(v) for u, v in G.edges())
+    
+    if kwargs.get('normalized', False):
+        max_s = sum(d * d for d in dict(G.degree()).values())
+        s = s / max_s if max_s > 0 else 0
+    
+    return float(s)
