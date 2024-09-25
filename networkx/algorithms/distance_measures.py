@@ -78,7 +78,34 @@ def _extrema_bounding(G, compute='diameter', weight=None):
        Theoretical Computer Science, 2015
        https://www.sciencedirect.com/science/article/pii/S0304397515001644
     """
-    pass
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Graph is not connected.")
+    
+    if compute not in ["diameter", "radius", "periphery", "center", "eccentricities"]:
+        raise ValueError("Invalid compute value.")
+    
+    n = G.number_of_nodes()
+    
+    # Use BFS to compute eccentricities
+    eccentricities = {}
+    for node in G.nodes():
+        distances = nx.single_source_shortest_path_length(G, node, weight=weight)
+        eccentricities[node] = max(distances.values())
+    
+    if compute == "eccentricities":
+        return eccentricities
+    
+    diameter = max(eccentricities.values())
+    radius = min(eccentricities.values())
+    
+    if compute == "diameter":
+        return diameter
+    elif compute == "radius":
+        return radius
+    elif compute == "periphery":
+        return [node for node, ecc in eccentricities.items() if ecc == diameter]
+    elif compute == "center":
+        return [node for node, ecc in eccentricities.items() if ecc == radius]
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -134,7 +161,24 @@ def eccentricity(G, v=None, sp=None, weight=None):
     {1: 2, 5: 3}
 
     """
-    pass
+    if sp is None:
+        sp = dict(nx.all_pairs_shortest_path_length(G, weight=weight))
+    
+    if v is None:
+        nodes = G.nodes()
+    elif isinstance(v, (list, set)):
+        nodes = v
+    else:
+        nodes = [v]
+    
+    ecc = {}
+    for n in nodes:
+        if n not in G:
+            raise nx.NetworkXError(f"Node {n} is not in the graph.")
+        length = max(sp[n].values())
+        ecc[n] = length
+    
+    return ecc
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -186,7 +230,13 @@ def diameter(G, e=None, usebounds=False, weight=None):
     --------
     eccentricity
     """
-    pass
+    if usebounds:
+        return _extrema_bounding(G, compute="diameter", weight=weight)
+    
+    if e is None:
+        e = eccentricity(G, weight=weight)
+    
+    return max(e.values())
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -239,7 +289,14 @@ def periphery(G, e=None, usebounds=False, weight=None):
     barycenter
     center
     """
-    pass
+    if usebounds:
+        return _extrema_bounding(G, compute="periphery", weight=weight)
+    
+    if e is None:
+        e = eccentricity(G, weight=weight)
+    
+    diameter = max(e.values())
+    return [v for v in e if e[v] == diameter]
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -288,7 +345,13 @@ def radius(G, e=None, usebounds=False, weight=None):
     2
 
     """
-    pass
+    if usebounds:
+        return _extrema_bounding(G, compute="radius", weight=weight)
+    
+    if e is None:
+        e = eccentricity(G, weight=weight)
+    
+    return min(e.values())
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -341,7 +404,14 @@ def center(G, e=None, usebounds=False, weight=None):
     barycenter
     periphery
     """
-    pass
+    if usebounds:
+        return _extrema_bounding(G, compute="center", weight=weight)
+    
+    if e is None:
+        e = eccentricity(G, weight=weight)
+    
+    radius = min(e.values())
+    return [v for v in e if e[v] == radius]
 
 
 @nx._dispatchable(edge_attrs='weight', mutates_input={'attr': 2})
@@ -399,7 +469,27 @@ def barycenter(G, weight=None, attr=None, sp=None):
     center
     periphery
     """
-    pass
+    if not nx.is_connected(G):
+        raise nx.NetworkXNoPath("G is not a connected graph.")
+    
+    if sp is None:
+        sp = dict(nx.all_pairs_shortest_path_length(G, weight=weight))
+    elif weight is not None:
+        raise ValueError("Cannot specify both sp and weight")
+    
+    smallest = float("inf")
+    barycenter_nodes = []
+    for v in G:
+        length = sum(sp[v].values())
+        if attr is not None:
+            G.nodes[v][attr] = length
+        if length < smallest:
+            smallest = length
+            barycenter_nodes = [v]
+        elif length == smallest:
+            barycenter_nodes.append(v)
+    
+    return barycenter_nodes
 
 
 @not_implemented_for('directed')
