@@ -75,7 +75,9 @@ def write_gexf(G, path, encoding='utf-8', prettyprint=True, version='1.2draft'
     .. [1] GEXF File Format, http://gexf.net/
     .. [2] GEXF schema, http://gexf.net/schema.html
     """
-    pass
+    writer = GEXFWriter(encoding=encoding, prettyprint=prettyprint, version=version)
+    writer.add_graph(G)
+    writer.write(path)
 
 
 def generate_gexf(G, encoding='utf-8', prettyprint=True, version='1.2draft'):
@@ -119,7 +121,10 @@ def generate_gexf(G, encoding='utf-8', prettyprint=True, version='1.2draft'):
     ----------
     .. [1] GEXF File Format, https://gephi.org/gexf/format/
     """
-    pass
+    writer = GEXFWriter(encoding=encoding, prettyprint=prettyprint, version=version)
+    writer.add_graph(G)
+    for line in writer.generate():
+        yield line
 
 
 @open_file(0, mode='rb')
@@ -159,7 +164,13 @@ def read_gexf(path, node_type=None, relabel=False, version='1.2draft'):
     ----------
     .. [1] GEXF File Format, http://gexf.net/
     """
-    pass
+    reader = GEXFReader(node_type=node_type, version=version)
+    G = reader(path)
+    
+    if relabel:
+        return relabel_gexf_graph(G)
+    else:
+        return G
 
 
 class GEXF:
@@ -259,4 +270,26 @@ def relabel_gexf_graph(G):
     "label" attribute.  It also handles relabeling the specific GEXF
     node attributes "parents", and "pid".
     """
-    pass
+    H = nx.create_empty_copy(G)
+    
+    try:
+        labels = nx.get_node_attributes(G, 'label')
+    except KeyError:
+        raise nx.NetworkXError('Missing node labels while relabel=True')
+
+    if len(set(labels.values())) != G.number_of_nodes():
+        raise nx.NetworkXError('Node labels are not unique while relabel=True')
+
+    for old, new in labels.items():
+        H.add_node(new, **G.nodes[old])
+        
+        # Handle specific GEXF attributes
+        if 'parents' in H.nodes[new]:
+            H.nodes[new]['parents'] = [labels[parent] for parent in H.nodes[new]['parents']]
+        if 'pid' in H.nodes[new]:
+            H.nodes[new]['pid'] = labels[H.nodes[new]['pid']]
+
+    for u, v, data in G.edges(data=True):
+        H.add_edge(labels[u], labels[v], **data)
+
+    return H
