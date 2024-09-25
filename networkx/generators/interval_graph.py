@@ -43,4 +43,26 @@ def interval_graph(intervals):
         if `intervals` contains an interval such that min1 > max1
         where min1,max1 = interval
     """
-    pass
+    if not isinstance(intervals, Sequence):
+        raise TypeError("intervals must be a sequence")
+    
+    G = nx.Graph()
+    
+    for i, interval in enumerate(intervals):
+        if not isinstance(interval, Sequence) or len(interval) != 2:
+            raise TypeError(f"Interval {i} must be a sequence of length 2")
+        
+        min1, max1 = interval
+        if min1 > max1:
+            raise ValueError(f"Invalid interval {i}: min1 > max1")
+        
+        G.add_node(interval)
+    
+    for i, interval1 in enumerate(intervals):
+        min1, max1 = interval1
+        for interval2 in intervals[i+1:]:
+            min2, max2 = interval2
+            if (min1 <= min2 <= max1) or (min2 <= min1 <= max2):
+                G.add_edge(interval1, interval2)
+    
+    return G
