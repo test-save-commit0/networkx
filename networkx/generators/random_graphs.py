@@ -57,7 +57,29 @@ def fast_gnp_random_graph(n, p, seed=None, directed=False):
        "Efficient generation of large random networks",
        Phys. Rev. E, 71, 036113, 2005.
     """
-    pass
+    if p <= 0 or p >= 1:
+        return nx.gnp_random_graph(n, p, seed=seed, directed=directed)
+
+    G = nx.empty_graph(n)
+    G.name = f"fast_gnp_random_graph({n}, {p})"
+
+    if directed:
+        G = nx.DiGraph(G)
+
+    v = 1
+    w = -1
+    lp = math.log(1.0 - p)
+
+    while v < n:
+        lr = math.log(1.0 - seed.random())
+        w = w + 1 + int(lr / lp)
+        while w >= v and v < n:
+            w = w - v
+            v = v + 1
+        if v < n:
+            G.add_edge(v, w)
+
+    return G
 
 
 @py_random_state(2)
@@ -102,7 +124,17 @@ def gnp_random_graph(n, p, seed=None, directed=False):
     .. [1] P. Erdős and A. Rényi, On Random Graphs, Publ. Math. 6, 290 (1959).
     .. [2] E. N. Gilbert, Random Graphs, Ann. Math. Stat., 30, 1141 (1959).
     """
-    pass
+    G = nx.empty_graph(n)
+    G.name = f"gnp_random_graph({n}, {p})"
+
+    if directed:
+        G = nx.DiGraph(G)
+        edges = itertools.permutations(range(n), 2)
+    else:
+        edges = itertools.combinations(range(n), 2)
+
+    G.add_edges_from(e for e in edges if seed.random() < p)
+    return G
 
 
 binomial_graph = gnp_random_graph
@@ -145,7 +177,31 @@ def dense_gnm_random_graph(n, m, seed=None):
     .. [1] Donald E. Knuth, The Art of Computer Programming,
         Volume 2/Seminumerical algorithms, Third Edition, Addison-Wesley, 1997.
     """
-    pass
+    mmax = n * (n - 1) // 2
+    if m >= mmax:
+        return nx.complete_graph(n)
+
+    G = nx.empty_graph(n)
+    G.name = f"dense_gnm_random_graph({n}, {m})"
+
+    if n == 1 or m >= mmax:
+        return G
+
+    u = 0
+    v = 1
+    t = 0
+    k = 0
+    while True:
+        if seed.random() * (mmax - t) < m - k:
+            G.add_edge(u, v)
+            k += 1
+            if k == m:
+                return G
+        t += 1
+        v += 1
+        if v == n:  # go to next row
+            u += 1
+            v = u + 1
 
 
 @py_random_state(2)
@@ -176,7 +232,28 @@ def gnm_random_graph(n, m, seed=None, directed=False):
     dense_gnm_random_graph
 
     """
-    pass
+    G = nx.empty_graph(n)
+    G.name = f"gnm_random_graph({n}, {m})"
+
+    if directed:
+        G = nx.DiGraph(G)
+        max_edges = n * (n - 1)
+    else:
+        max_edges = n * (n - 1) // 2
+
+    if m >= max_edges:
+        return nx.complete_graph(n, create_using=G)
+
+    nlist = list(G.nodes())
+    edge_count = 0
+    while edge_count < m:
+        u = seed.choice(nlist)
+        v = seed.choice(nlist)
+        if u != v and not G.has_edge(u, v):
+            G.add_edge(u, v)
+            edge_count += 1
+
+    return G
 
 
 @py_random_state(3)
@@ -218,7 +295,24 @@ def newman_watts_strogatz_graph(n, k, p, seed=None):
        Physics Letters A, 263, 341, 1999.
        https://doi.org/10.1016/S0375-9601(99)00757-4
     """
-    pass
+    if k >= n:
+        raise nx.NetworkXError("k>=n, choose smaller k or larger n")
+
+    G = nx.empty_graph(n)
+    G.name = f"newman_watts_strogatz_graph({n}, {k}, {p})"
+    nodes = list(G.nodes())
+    for j in range(1, k // 2 + 1):
+        targets = nodes[j:] + nodes[0:j]  # first j nodes are now last in list
+        G.add_edges_from(zip(nodes, targets))
+    # add new edges
+    for u, v in list(G.edges()):
+        if seed.random() < p:
+            w = seed.choice(nodes)
+            # Enforce no self-loops or multiple edges
+            while w == u or G.has_edge(u, w):
+                w = seed.choice(nodes)
+            G.add_edge(u, w)
+    return G
 
 
 @py_random_state(3)
@@ -263,7 +357,25 @@ def watts_strogatz_graph(n, k, p, seed=None):
        Collective dynamics of small-world networks,
        Nature, 393, pp. 440--442, 1998.
     """
-    pass
+    if k >= n:
+        raise nx.NetworkXError("k>=n, choose smaller k or larger n")
+
+    G = nx.empty_graph(n)
+    G.name = f"watts_strogatz_graph({n}, {k}, {p})"
+    nodes = list(G.nodes())
+    for j in range(1, k // 2 + 1):
+        targets = nodes[j:] + nodes[0:j]  # first j nodes are now last in list
+        G.add_edges_from(zip(nodes, targets))
+    # rewire edges from each node
+    for u, v in list(G.edges()):
+        if seed.random() < p:
+            w = seed.choice(nodes)
+            # Enforce no self-loops or multiple edges
+            while w == u or G.has_edge(u, w):
+                w = seed.choice(nodes)
+            G.remove_edge(u, v)
+            G.add_edge(u, w)
+    return G
 
 
 @py_random_state(4)
@@ -311,7 +423,11 @@ def connected_watts_strogatz_graph(n, k, p, tries=100, seed=None):
        Collective dynamics of small-world networks,
        Nature, 393, pp. 440--442, 1998.
     """
-    pass
+    for i in range(tries):
+        G = watts_strogatz_graph(n, k, p, seed)
+        if nx.is_connected(G):
+            return G
+    raise nx.NetworkXError(f"Failed to generate connected graph in {tries} tries")
 
 
 @py_random_state(2)
@@ -360,7 +476,47 @@ def random_regular_graph(d, n, seed=None):
        San Diego, CA, USA, pp 213--222, 2003.
        http://portal.acm.org/citation.cfm?id=780542.780576
     """
-    pass
+    if (n * d) % 2 != 0:
+        raise nx.NetworkXError("n * d must be even")
+    if d >= n:
+        raise nx.NetworkXError("d must be less than n")
+
+    def _suitable(edges, potential_edges):
+        # Helper function to check if there are suitable edges remaining
+        # If False, the generation of the graph has failed
+        if not potential_edges:
+            return True
+        for u, v in potential_edges:
+            if v not in edges[u]:
+                return True
+        return False
+
+    def _try_creation():
+        edges = {i: set() for i in range(n)}
+        stubs = list(range(n)) * d
+        seed.shuffle(stubs)
+        while stubs:
+            potential_edges = [(stubs[0], stubs[1])]
+            for i in range(2, len(stubs), 2):
+                u, v = stubs[i], stubs[i + 1]
+                if u == v or v in edges[u]:
+                    potential_edges.append((u, v))
+                else:
+                    edges[u].add(v)
+                    edges[v].add(u)
+            if not _suitable(edges, potential_edges):
+                return None
+            stubs = [u for u, v in potential_edges]
+        return edges
+
+    # Try to create the graph, if it fails, try again
+    for _ in range(100):  # Arbitrary limit on number of tries
+        edges = _try_creation()
+        if edges is not None:
+            G = nx.Graph(edges)
+            G.name = f"random_regular_graph({d}, {n})"
+            return G
+    raise nx.NetworkXError("Failed to generate graph")
 
 
 def _random_subset(seq, m, rng):
@@ -412,7 +568,33 @@ def barabasi_albert_graph(n, m, seed=None, initial_graph=None):
     .. [1] A. L. Barabási and R. Albert "Emergence of scaling in
        random networks", Science 286, pp 509-512, 1999.
     """
-    pass
+    if m < 1 or m >= n:
+        raise nx.NetworkXError("Barabási–Albert network must have m >= 1 and m < n, m = %d, n = %d" % (m, n))
+
+    if initial_graph is None:
+        # Default initial graph : star graph on (m + 1) nodes
+        G = nx.star_graph(m)
+    else:
+        G = initial_graph.copy()
+
+    if len(G) < m or len(G) > n:
+        raise nx.NetworkXError(f"Initial graph must have m <= n0 <= n nodes, n0 = {len(G)}")
+
+    # List of existing nodes, with nodes repeated once for each adjacent edge
+    repeated_nodes = [n for n, d in G.degree() for _ in range(d)]
+    # Start adding the other n-m nodes. The first node is m.
+    source = len(G)
+    while source < n:
+        # Add edges to m nodes from the existing nodes
+        targets = _random_subset(repeated_nodes, m, seed)
+        # Add the edges
+        G.add_edges_from(zip([source] * m, targets))
+        # Add one node to the list for each new edge just created
+        repeated_nodes.extend(targets)
+        # And the new node itself
+        repeated_nodes.extend([source] * m)
+        source += 1
+    return G
 
 
 @py_random_state(4)
