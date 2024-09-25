@@ -62,7 +62,22 @@ def not_implemented_for(*graph_types):
        def sp_np_function(G):
            pass
     """
-    pass
+    def _not_implemented_for(f):
+        @wraps(f)
+        def _wrapper(*args, **kwargs):
+            graph = args[0]
+            terms = set(graph_types)
+            if "directed" in terms and graph.is_directed():
+                raise nx.NetworkXNotImplemented("not implemented for directed graphs")
+            if "undirected" in terms and not graph.is_directed():
+                raise nx.NetworkXNotImplemented("not implemented for undirected graphs")
+            if "multigraph" in terms and graph.is_multigraph():
+                raise nx.NetworkXNotImplemented("not implemented for multigraphs")
+            if "graph" in terms and not graph.is_multigraph():
+                raise nx.NetworkXNotImplemented("not implemented for graphs")
+            return f(*args, **kwargs)
+        return _wrapper
+    return _not_implemented_for
 
 
 fopeners = {'.gz': gzip.open, '.gzip': gzip.open, '.bz2': bz2.BZ2File}
@@ -144,7 +159,34 @@ def open_file(path_arg, mode='r'):
     Instead, we use a try block, as shown above.
     When we exit the function, fobj will be closed, if it should be, by the decorator.
     """
-    pass
+    def _open_file(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Get the path argument
+            if isinstance(path_arg, int):
+                path = args[path_arg]
+            else:
+                path = kwargs.get(path_arg)
+
+            # Check if path is already a file-like object
+            if hasattr(path, 'read') or hasattr(path, 'write'):
+                return func(*args, **kwargs)
+
+            # Open the file
+            with open(path, mode) as fobj:
+                # Replace the path argument with the file object
+                if isinstance(path_arg, int):
+                    new_args = list(args)
+                    new_args[path_arg] = fobj
+                    args = tuple(new_args)
+                else:
+                    kwargs[path_arg] = fobj
+
+                # Call the function
+                return func(*args, **kwargs)
+
+        return wrapper
+    return _open_file
 
 
 def nodes_or_number(which_args):
@@ -192,7 +234,31 @@ def nodes_or_number(which_args):
            # presumably r is a number. It is not handled by this decorator.
            # n is converted to a list of nodes
     """
-    pass
+    def _nodes_or_number(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            def convert(arg):
+                if isinstance(arg, int):
+                    return range(arg)
+                return arg
+
+            new_args = list(args)
+            new_kwargs = kwargs.copy()
+
+            if isinstance(which_args, (str, int)):
+                which_args = [which_args]
+
+            for arg in which_args:
+                if isinstance(arg, int):
+                    if arg < len(args):
+                        new_args[arg] = convert(args[arg])
+                else:
+                    if arg in kwargs:
+                        new_kwargs[arg] = convert(kwargs[arg])
+
+            return func(*new_args, **new_kwargs)
+        return wrapper
+    return _nodes_or_number
 
 
 def np_random_state(random_state_argument):
@@ -239,7 +305,26 @@ def np_random_state(random_state_argument):
     --------
     py_random_state
     """
-    pass
+    def _np_random_state(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if isinstance(random_state_argument, int):
+                random_state = args[random_state_argument]
+            else:
+                random_state = kwargs.get(random_state_argument)
+
+            random_state = create_random_state(random_state)
+
+            if isinstance(random_state_argument, int):
+                new_args = list(args)
+                new_args[random_state_argument] = random_state
+                args = tuple(new_args)
+            else:
+                kwargs[random_state_argument] = random_state
+
+            return func(*args, **kwargs)
+        return wrapper
+    return _np_random_state
 
 
 def py_random_state(random_state_argument):
@@ -298,7 +383,26 @@ def py_random_state(random_state_argument):
     --------
     np_random_state
     """
-    pass
+    def _py_random_state(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if isinstance(random_state_argument, int):
+                random_state = args[random_state_argument]
+            else:
+                random_state = kwargs.get(random_state_argument)
+
+            random_state = create_py_random_state(random_state)
+
+            if isinstance(random_state_argument, int):
+                new_args = list(args)
+                new_args[random_state_argument] = random_state
+                args = tuple(new_args)
+            else:
+                kwargs[random_state_argument] = random_state
+
+            return func(*args, **kwargs)
+        return wrapper
+    return _py_random_state
 
 
 class argmap:
@@ -686,7 +790,15 @@ class argmap:
         [1] https://github.com/networkx/networkx/issues/4732
 
         """
-        pass
+        if not hasattr(func, '__argmap__'):
+            return func
+        
+        compiled_func = func.__argmap__.compile(func.__wrapped__)
+        func.__code__ = compiled_func.__code__
+        func.__defaults__ = compiled_func.__defaults__
+        func.__kwdefaults__ = compiled_func.__kwdefaults__
+        
+        return func
 
     def __call__(self, f):
         """Construct a lazily decorated wrapper of f.
@@ -750,7 +862,10 @@ class argmap:
         count : int
             An integer unique to this Python session (simply counts from zero)
         """
-        pass
+        if not hasattr(cls, '_counter'):
+            cls._counter = 0
+        cls._counter += 1
+        return cls._counter
     _bad_chars = re.compile('[^a-zA-Z0-9_]')
 
     @classmethod
@@ -769,7 +884,12 @@ class argmap:
             The mangled version of `f.__name__` (if `f.__name__` exists) or `f`
 
         """
-        pass
+        if hasattr(f, '__name__'):
+            name = f.__name__
+        else:
+            name = str(f)
+        name = cls._bad_chars.sub('_', name)
+        return f"{name}_{cls._count()}"
 
     def compile(self, f):
         """Compile the decorated function.
