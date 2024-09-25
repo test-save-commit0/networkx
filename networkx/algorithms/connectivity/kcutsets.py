@@ -79,9 +79,60 @@ def all_node_cuts(G, k=None, flow_func=None):
             http://onlinelibrary.wiley.com/doi/10.1002/net.3230230604/abstract
 
     """
-    pass
+    if not nx.is_connected(G):
+        raise nx.NetworkXError("Input graph is not connected")
+
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    if k is None:
+        k = nx.node_connectivity(G, flow_func=flow_func)
+
+    # Special cases
+    if k == 0:
+        return []
+    if k == 1:
+        return (set([node]) for node in nx.articulation_points(G))
+
+    # General case
+    H = build_auxiliary_node_connectivity(G)
+    R = build_residual_network(H, 'capacity')
+    kwargs = dict(flow_func=flow_func, residual=R)
+
+    # Sort nodes by degree in descending order
+    nodes = sorted(G.nodes(), key=lambda n: G.degree(n), reverse=True)
+    
+    # Set to store the cutsets we've found
+    cutsets = set()
+
+    for source in nodes:
+        for target in G.nodes():
+            if source == target or G.has_edge(source, target):
+                continue
+
+            # Find the minimum cut
+            cut_value, partition = nx.minimum_cut(H, source, target, **kwargs)
+            
+            if cut_value == k:
+                # We found a minimum cut
+                reachable, non_reachable = partition
+                cutset = set(reachable) & set(non_reachable)
+                if len(cutset) == k and cutset not in cutsets:
+                    cutsets.add(frozenset(cutset))
+                    yield set(cutset)
+
+                # Add an edge to make sure we don't find this cut again
+                H.add_edge(source, target, capacity=H.number_of_edges())
+
+    # Clean up
+    H.clear()
+    R.clear()
 
 
 def _is_separating_set(G, cut):
     """Assumes that the input graph is connected"""
-    pass
+    if len(cut) == len(G) - 1:
+        return True
+    H = G.copy()
+    H.remove_nodes_from(cut)
+    return not nx.is_connected(H)
