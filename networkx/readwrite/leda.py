@@ -71,26 +71,28 @@ def parse_leda(lines):
         if header != 'LEDA.GRAPH':
             raise NetworkXError('LEDA file must start with LEDA.GRAPH')
 
+        next(lines)  # skip the string data type line
+        next(lines)  # skip the int data type line
         directed = next(lines)
-        if directed not in ['0', '1']:
-            raise NetworkXError('Second line must be 0 or 1')
+        if directed not in ['-1', '0', '1']:
+            raise NetworkXError('Fourth line must be -1, 0 or 1')
 
         G = nx.DiGraph() if directed == '1' else nx.Graph()
 
         num_nodes = int(next(lines))
         for i in range(num_nodes):
             node_data = next(lines).split('|')
-            if len(node_data) < 2:
+            if len(node_data) < 3:
                 raise NetworkXError(f'Invalid node data: {node_data}')
-            G.add_node(i + 1, label=node_data[0], data=node_data[1])
+            G.add_node(f'v{i+1}', label=node_data[1])
 
         num_edges = int(next(lines))
         for i in range(num_edges):
             edge_data = next(lines).split('|')
-            if len(edge_data) < 4:
+            if len(edge_data) < 5:
                 raise NetworkXError(f'Invalid edge data: {edge_data}')
-            source, target, label, data = edge_data[:4]
-            G.add_edge(int(source), int(target), label=label, data=data)
+            source, target, _, label = edge_data[:4]
+            G.add_edge(f'v{source}', f'v{target}', label=label[1:-1])
 
     except StopIteration:
         raise NetworkXError('Incomplete LEDA.GRAPH data')
