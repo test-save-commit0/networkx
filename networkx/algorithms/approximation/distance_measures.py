@@ -69,7 +69,17 @@ def diameter(G, seed=None):
        International Symposium on Experimental Algorithms. Springer, Berlin, Heidelberg, 2012.
        https://courses.cs.ut.ee/MTAT.03.238/2014_fall/uploads/Main/diameter.pdf
     """
-    pass
+    if len(G) == 0:
+        raise nx.NetworkXError("Graph is empty.")
+    
+    if nx.is_directed(G):
+        if not nx.is_strongly_connected(G):
+            raise nx.NetworkXError("Graph is not strongly connected.")
+        return _two_sweep_directed(G, seed)
+    else:
+        if not nx.is_connected(G):
+            raise nx.NetworkXError("Graph is not connected.")
+        return _two_sweep_undirected(G, seed)
 
 
 def _two_sweep_undirected(G, seed):
@@ -85,7 +95,20 @@ def _two_sweep_undirected(G, seed):
 
         ``seed`` is a random.Random or numpy.random.RandomState instance
     """
-    pass
+    nodes = list(G.nodes())
+    if not nodes:
+        return 0
+    
+    # Pick a random starting node
+    start = seed.choice(nodes)
+    
+    # First sweep: find the farthest node from the random start
+    path_lengths = nx.single_source_shortest_path_length(G, start)
+    farthest_node = max(path_lengths, key=path_lengths.get)
+    
+    # Second sweep: find the eccentricity of the farthest node
+    path_lengths = nx.single_source_shortest_path_length(G, farthest_node)
+    return max(path_lengths.values())
 
 
 def _two_sweep_directed(G, seed):
@@ -107,4 +130,25 @@ def _two_sweep_directed(G, seed):
 
         ``seed`` is a random.Random or numpy.random.RandomState instance
     """
-    pass
+    nodes = list(G.nodes())
+    if not nodes:
+        return 0
+    
+    # Select a random source node
+    s = seed.choice(nodes)
+    
+    # Forward BFS from s
+    forward_lengths = nx.single_source_shortest_path_length(G, s)
+    a1 = max(forward_lengths, key=forward_lengths.get)
+    
+    # Backward BFS from s
+    backward_lengths = nx.single_source_shortest_path_length(G.reverse(), s)
+    a2 = max(backward_lengths, key=backward_lengths.get)
+    
+    # Compute LB1: backward eccentricity of a1
+    LB1 = max(nx.single_source_shortest_path_length(G.reverse(), a1).values())
+    
+    # Compute LB2: forward eccentricity of a2
+    LB2 = max(nx.single_source_shortest_path_length(G, a2).values())
+    
+    return max(LB1, LB2)
