@@ -58,7 +58,18 @@ def all_pairs_lowest_common_ancestor(G, pairs=None):
     --------
     lowest_common_ancestor
     """
-    pass
+    if len(G) == 0:
+        raise nx.NetworkXPointlessConcept("LCA is not defined on null graphs.")
+    if not nx.is_directed_acyclic_graph(G):
+        raise nx.NetworkXError("LCA only defined on directed acyclic graphs.")
+    
+    if pairs is None:
+        pairs = combinations_with_replacement(G.nodes(), 2)
+    
+    for pair in pairs:
+        node1, node2 = pair
+        lca = lowest_common_ancestor(G, node1, node2)
+        yield (pair, lca)
 
 
 @not_implemented_for('undirected')
@@ -91,7 +102,27 @@ def lowest_common_ancestor(G, node1, node2, default=None):
     See Also
     --------
     all_pairs_lowest_common_ancestor"""
-    pass
+    if not nx.is_directed_acyclic_graph(G):
+        raise nx.NetworkXError("LCA only defined on directed acyclic graphs.")
+    
+    if node1 not in G or node2 not in G:
+        return default
+    
+    if node1 == node2:
+        return node1
+    
+    ancestors1 = nx.ancestors(G, node1)
+    ancestors1.add(node1)
+    ancestors2 = nx.ancestors(G, node2)
+    ancestors2.add(node2)
+    
+    common_ancestors = ancestors1.intersection(ancestors2)
+    
+    if not common_ancestors:
+        return default
+    
+    # Find the common ancestor with the longest path from the root
+    return max(common_ancestors, key=lambda n: nx.shortest_path_length(G, n, node1))
 
 
 @not_implemented_for('undirected')
@@ -154,4 +185,44 @@ def tree_all_pairs_lowest_common_ancestor(G, root=None, pairs=None):
     all_pairs_lowest_common_ancestor: similar routine for general DAGs
     lowest_common_ancestor: just a single pair for general DAGs
     """
-    pass
+    if not nx.is_tree(G):
+        raise nx.NetworkXError("G is not a tree.")
+    
+    if root is None:
+        root = next(nx.topological_sort(G))
+    
+    if pairs is None:
+        pairs = combinations_with_replacement(G.nodes(), 2)
+    
+    def tarjan_off_line_lca(root):
+        ancestors = UnionFind()
+        ancestor = {}
+        color = defaultdict(bool)
+        for node in G:
+            ancestors[node]
+        
+        def dfs(node):
+            ancestors[node] = node
+            ancestor[node] = node
+            
+            for child in G[node]:
+                if child not in ancestor:
+                    dfs(child)
+                    ancestors.union(node, child)
+                ancestors[ancestors[child]] = node
+            
+            color[node] = True
+            
+            for v in pairs_dict.get(node, []):
+                if color[v]:
+                    yield (node, v), ancestor[ancestors[v]]
+        
+        yield from dfs(root)
+    
+    pairs_dict = defaultdict(list)
+    for u, v in pairs:
+        pairs_dict[u].append(v)
+        if u != v:
+            pairs_dict[v].append(u)
+    
+    return tarjan_off_line_lca(root)
