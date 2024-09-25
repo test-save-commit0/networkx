@@ -19,7 +19,13 @@ def _generate_graphs():
     This function reads the file given in :data:`.ATLAS_FILE`.
 
     """
-    pass
+    with gzip.open(ATLAS_FILE, "rt") as f:
+        for line in f:
+            if line.startswith("//"):
+                continue
+            edge_list = [tuple(map(int, e.split())) for e in line.strip().split(":")]
+            G = nx.Graph(edge_list)
+            yield G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -56,7 +62,17 @@ def graph_atlas(i):
            Oxford University Press, 1998.
 
     """
-    pass
+    if i < 0:
+        raise ValueError("Index must be non-negative.")
+    if i >= NUM_GRAPHS:
+        raise ValueError(f"Index must be less than {NUM_GRAPHS}.")
+    
+    if i == 0:
+        return nx.Graph()
+    
+    for idx, G in enumerate(_generate_graphs(), start=1):
+        if idx == i:
+            return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -108,4 +124,6 @@ def graph_atlas_g():
                Oxford University Press, 1998.
 
     """
-    pass
+    atlas = [nx.Graph()]  # Start with the null graph
+    atlas.extend(_generate_graphs())
+    return atlas
