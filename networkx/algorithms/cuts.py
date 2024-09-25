@@ -65,7 +65,18 @@ def cut_size(G, S, T=None, weight=None):
     multiplicity.
 
     """
-    pass
+    if T is None:
+        T = set(G.nodes()) - set(S)
+    
+    cut_edges = ((u, v) for u in S for v in T if G.has_edge(u, v))
+    
+    if G.is_directed():
+        cut_edges = chain(cut_edges, ((u, v) for u in T for v in S if G.has_edge(u, v)))
+    
+    if weight is None:
+        return sum(1 for _ in cut_edges)
+    else:
+        return sum(G[u][v].get(weight, 1) for u, v in cut_edges)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -107,7 +118,15 @@ def volume(G, S, weight=None):
            <https://www.cs.purdue.edu/homes/dgleich/publications/Gleich%202005%20-%20hierarchical%20directed%20spectral.pdf>
 
     """
-    pass
+    if G.is_directed():
+        degree = G.out_degree
+    else:
+        degree = G.degree
+    
+    if weight is None:
+        return sum(dict(degree(S)).values())
+    else:
+        return sum(dict(degree(S, weight=weight)).values())
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -155,7 +174,17 @@ def normalized_cut_size(G, S, T=None, weight=None):
            <https://www.cs.purdue.edu/homes/dgleich/publications/Gleich%202005%20-%20hierarchical%20directed%20spectral.pdf>
 
     """
-    pass
+    if T is None:
+        T = set(G.nodes()) - set(S)
+    
+    cut = cut_size(G, S, T, weight)
+    vol_S = volume(G, S, weight)
+    vol_T = volume(G, T, weight)
+    
+    if vol_S == 0 or vol_T == 0:
+        return float('inf')
+    
+    return cut * (1 / vol_S + 1 / vol_T)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -198,7 +227,17 @@ def conductance(G, S, T=None, weight=None):
            <https://www.cs.purdue.edu/homes/dgleich/publications/Gleich%202005%20-%20hierarchical%20directed%20spectral.pdf>
 
     """
-    pass
+    if T is None:
+        T = set(G.nodes()) - set(S)
+    
+    cut = cut_size(G, S, T, weight)
+    vol_S = volume(G, S, weight)
+    vol_T = volume(G, T, weight)
+    
+    if vol_S == 0 or vol_T == 0:
+        return float('inf')
+    
+    return cut / min(vol_S, vol_T)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -242,7 +281,11 @@ def edge_expansion(G, S, T=None, weight=None):
            <http://www.math.ucsd.edu/~fan/research/revised.html>
 
     """
-    pass
+    if T is None:
+        T = set(G.nodes()) - set(S)
+    
+    cut = cut_size(G, S, T, weight)
+    return cut / min(len(S), len(T))
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -286,7 +329,16 @@ def mixing_expansion(G, S, T=None, weight=None):
            <https://doi.org/10.1561/0400000010>
 
     """
-    pass
+    if T is None:
+        T = set(G.nodes()) - set(S)
+    
+    cut = cut_size(G, S, T, weight)
+    total_edges = G.number_of_edges()
+    
+    if weight is not None:
+        total_edges = sum(d[weight] for u, v, d in G.edges(data=True))
+    
+    return cut / (2 * total_edges)
 
 
 @nx._dispatchable
@@ -323,7 +375,9 @@ def node_expansion(G, S):
            <https://doi.org/10.1561/0400000010>
 
     """
-    pass
+    S = set(S)
+    node_boundary = set(n for s in S for n in G[s]) - S
+    return len(node_boundary) / len(S)
 
 
 @nx._dispatchable
@@ -360,4 +414,6 @@ def boundary_expansion(G, S):
            <https://doi.org/10.1561/0400000010>
 
     """
-    pass
+    S = set(S)
+    node_boundary = set(n for s in S for n in G[s]) - S
+    return len(node_boundary) / len(S)
