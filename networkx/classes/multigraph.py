@@ -289,7 +289,8 @@ class MultiGraph(Graph):
         If you subclass the base classes, use this to designate
         what directed class to use for `to_directed()` copies.
         """
-        pass
+        from networkx import MultiDiGraph
+        return MultiDiGraph
 
     def to_undirected_class(self):
         """Returns the class to use for empty undirected copies.
@@ -297,7 +298,7 @@ class MultiGraph(Graph):
         If you subclass the base classes, use this to designate
         what directed class to use for `to_directed()` copies.
         """
-        pass
+        return MultiGraph
 
     def __init__(self, incoming_graph_data=None, multigraph_input=None, **attr
         ):
@@ -412,7 +413,14 @@ class MultiGraph(Graph):
         -------
         key : int
         """
-        pass
+        try:
+            keydict = self._adj[u][v]
+        except KeyError:
+            return 0
+        key = len(keydict)
+        while key in keydict:
+            key += 1
+        return key
 
     def add_edge(self, u_for_edge, v_for_edge, key=None, **attr):
         """Add an edge between u and v.
@@ -480,7 +488,22 @@ class MultiGraph(Graph):
         >>> G[1][2][0].update({0: 5})
         >>> G.edges[1, 2, 0].update({0: 5})
         """
-        pass
+        u, v = u_for_edge, v_for_edge
+        if key is None:
+            key = self.new_edge_key(u, v)
+        if u not in self._adj:
+            self._adj[u] = self.adjlist_inner_dict_factory()
+            self._node[u] = {}
+        if v not in self._adj:
+            self._adj[v] = self.adjlist_inner_dict_factory()
+            self._node[v] = {}
+        if v not in self._adj[u]:
+            self._adj[u][v] = self.edge_key_dict_factory()
+            self._adj[v][u] = self._adj[u][v]
+        datadict = self._adj[u][v].get(key, self.edge_attr_dict_factory())
+        datadict.update(attr)
+        self._adj[u][v][key] = datadict
+        return key
 
     def add_edges_from(self, ebunch_to_add, **attr):
         """Add all the edges in ebunch_to_add.
@@ -550,7 +573,29 @@ class MultiGraph(Graph):
         >>> # right way - note that there will be no self-edge for node 5
         >>> assigned_keys = G.add_edges_from(list((5, n) for n in G.nodes))
         """
-        pass
+        assigned_keys = []
+        for e in ebunch_to_add:
+            if len(e) == 4:
+                u, v, key, dd = e
+            elif len(e) == 3:
+                u, v, dd = e
+                key = None
+            elif len(e) == 2:
+                u, v = e
+                dd = {}
+                key = None
+            else:
+                raise NetworkXError(f"Edge tuple {e} must be a 2-tuple, 3-tuple or 4-tuple.")
+
+            if key is None:
+                key = self.new_edge_key(u, v)
+            
+            edge_attr = attr.copy()
+            edge_attr.update(dd)
+            assigned_key = self.add_edge(u, v, key=key, **edge_attr)
+            assigned_keys.append(assigned_key)
+        
+        return assigned_keys
 
     def remove_edge(self, u, v, key=None):
         """Remove an edge between u and v.
@@ -611,7 +656,26 @@ class MultiGraph(Graph):
         MultiEdgeView([(1, 2, 'second')])
 
         """
-        pass
+        try:
+            d = self._adj[u][v]
+        except KeyError:
+            raise NetworkXError(f"The edge {u}-{v} is not in the graph.")
+        
+        if key is None:
+            if d:
+                key = list(d.keys())[-1]  # Remove the last added edge
+            else:
+                raise NetworkXError(f"The edge {u}-{v} is not in the graph.")
+        
+        try:
+            del d[key]
+        except KeyError:
+            raise NetworkXError(f"The edge {u}-{v} with key {key} is not in the graph.")
+        
+        if len(d) == 0:
+            del self._adj[u][v]
+            if u != v:  # self-loop needs only one entry removed
+                del self._adj[v][u]
 
     def remove_edges_from(self, ebunch):
         """Remove all edges specified in ebunch.
@@ -665,7 +729,21 @@ class MultiGraph(Graph):
         MultiEdgeView([(0, 1, 'x'), (0, 1, 'y')])
 
         """
-        pass
+        for e in ebunch:
+            try:
+                if len(e) == 2:
+                    u, v = e
+                    self.remove_edge(u, v)
+                elif len(e) == 3:
+                    u, v, key = e
+                    self.remove_edge(u, v, key)
+                elif len(e) == 4:
+                    u, v, key, _ = e
+                    self.remove_edge(u, v, key)
+                else:
+                    raise ValueError("Edge tuple {e} must be a 2-tuple, 3-tuple or 4-tuple.")
+            except NetworkXError:
+                pass  # silently ignore edges not in graph
 
     def has_edge(self, u, v, key=None):
         """Returns True if the graph has an edge between nodes u and v.
@@ -719,7 +797,13 @@ class MultiGraph(Graph):
         True
 
         """
-        pass
+        try:
+            if key is None:
+                return v in self._adj[u]
+            else:
+                return key in self._adj[u][v]
+        except KeyError:
+            return False
 
     @cached_property
     def edges(self):
@@ -910,11 +994,11 @@ class MultiGraph(Graph):
 
     def is_multigraph(self):
         """Returns True if graph is a multigraph, False otherwise."""
-        pass
+        return True
 
     def is_directed(self):
         """Returns True if graph is directed, False otherwise."""
-        pass
+        return False
 
     def copy(self, as_view=False):
         """Returns a copy of the graph.
@@ -993,7 +1077,18 @@ class MultiGraph(Graph):
         >>> H = G.copy()
 
         """
-        pass
+        if as_view:
+            return nx.graphviews.MultiGraphView(self)
+        G = self.__class__()
+        G.graph.update(self.graph)
+        G.add_nodes_from((n, d.copy()) for n, d in self._node.items())
+        G.add_edges_from(
+            (u, v, key, datadict.copy())
+            for u, nbrs in self._adj.items()
+            for v, keydict in nbrs.items()
+            for key, datadict in keydict.items()
+        )
+        return G
 
     def to_directed(self, as_view=False):
         """Returns a directed representation of the graph.
@@ -1041,7 +1136,20 @@ class MultiGraph(Graph):
         >>> list(H.edges)
         [(0, 1, 0)]
         """
-        pass
+        graph_class = self.to_directed_class()
+        if as_view:
+            return nx.graphviews.MultiDiGraphView(self)
+        # deepcopy when not a view
+        G = graph_class()
+        G.graph.update(deepcopy(self.graph))
+        G.add_nodes_from((n, deepcopy(d)) for n, d in self._node.items())
+        G.add_edges_from(
+            (u, v, key, deepcopy(datadict))
+            for u, nbrs in self._adj.items()
+            for v, keydict in nbrs.items()
+            for key, datadict in keydict.items()
+        )
+        return G
 
     def to_undirected(self, as_view=False):
         """Returns an undirected copy of the graph.
@@ -1081,7 +1189,20 @@ class MultiGraph(Graph):
         >>> list(G2.edges)
         [(0, 1, 0), (0, 1, 1), (1, 2, 0)]
         """
-        pass
+        graph_class = self.to_undirected_class()
+        if as_view:
+            return nx.graphviews.MultiGraphView(self)
+        # deepcopy when not a view
+        G = graph_class()
+        G.graph.update(deepcopy(self.graph))
+        G.add_nodes_from((n, deepcopy(d)) for n, d in self._node.items())
+        G.add_edges_from(
+            (u, v, key, deepcopy(datadict))
+            for u, nbrs in self._adj.items()
+            for v, keydict in nbrs.items()
+            for key, datadict in keydict.items()
+        )
+        return G
 
     def number_of_edges(self, u=None, v=None):
         """Returns the number of edges between two nodes.
@@ -1133,4 +1254,8 @@ class MultiGraph(Graph):
             1
 
         """
-        pass
+        if u is None:
+            return sum(len(nbrs) for nbrs in self._adj.values()) // 2
+        if v in self._adj[u]:
+            return len(self._adj[u][v])
+        return 0
