@@ -38,7 +38,15 @@ def choose_pref_attach(degs, seed):
     v: object
         A key of degs or None if degs is empty
     """
-    pass
+    if not degs:
+        return None
+    
+    total = sum(degs.values())
+    r = seed.random() * total
+    for k, v in degs.items():
+        r -= v
+        if r <= 0:
+            return k
 
 
 class AS_graph_generator:
@@ -88,7 +96,13 @@ class AS_graph_generator:
         G: Networkx Graph
             Core network
         """
-        pass
+        G = nx.Graph()
+        for i in range(self.n_t):
+            G.add_node(i, type='T')
+        for i in range(self.n_t):
+            for j in range(i + 1, self.n_t):
+                G.add_edge(i, j, type='peer', customer='none')
+        return G
 
     def choose_peer_pref_attach(self, node_list):
         """Pick a node with a probability weighted by its peer degree.
@@ -96,7 +110,8 @@ class AS_graph_generator:
         Pick a node from node_list with preferential attachment
         computed only on their peer degree
         """
-        pass
+        peer_degs = {n: sum(1 for _, v, d in self.G.edges(n, data=True) if d['type'] == 'peer') for n in node_list}
+        return choose_pref_attach(peer_degs, self.seed)
 
     def choose_node_pref_attach(self, node_list):
         """Pick a node with a probability weighted by its degree.
@@ -104,11 +119,17 @@ class AS_graph_generator:
         Pick a node from node_list with preferential attachment
         computed on their degree
         """
-        pass
+        degs = {n: self.G.degree(n) for n in node_list}
+        return choose_pref_attach(degs, self.seed)
 
     def add_customer(self, i, j):
         """Keep the dictionaries 'customers' and 'providers' consistent."""
-        pass
+        if i not in self.customers:
+            self.customers[i] = set()
+        if j not in self.providers:
+            self.providers[j] = set()
+        self.customers[i].add(j)
+        self.providers[j].add(i)
 
     def add_node(self, i, kind, reg2prob, avg_deg, t_edge_prob):
         """Add a node and its customer transit edges to the graph.
@@ -133,7 +154,30 @@ class AS_graph_generator:
         i: object
             Identifier of the new node
         """
-        pass
+        self.G.add_node(i, type=kind)
+        self.node_region[i] = self.seed.choice(range(self.n_regions))
+        if self.seed.random() < reg2prob:
+            self.node_region[i] = set([self.node_region[i], self.seed.choice(range(self.n_regions))])
+        
+        deg = uniform_int_from_avg(1, avg_deg, self.seed)
+        providers = []
+        
+        if self.seed.random() < t_edge_prob:
+            t_node = self.seed.choice([n for n, d in self.G.nodes(data=True) if d['type'] == 'T'])
+            providers.append(t_node)
+            deg -= 1
+        
+        while deg > 0:
+            provider = self.choose_node_pref_attach([n for n in self.G.nodes() if n not in providers])
+            if provider is not None:
+                providers.append(provider)
+                deg -= 1
+        
+        for p in providers:
+            self.G.add_edge(i, p, type='transit', customer=i)
+            self.add_customer(i, p)
+        
+        return i
 
     def add_m_peering_link(self, m, to_kind):
         """Add a peering link between two middle tier (M) nodes.
@@ -152,7 +196,14 @@ class AS_graph_generator:
         -------
         success: boolean
         """
-        pass
+        assert to_kind == 'M'
+        candidates = [n for n, d in self.G.nodes(data=True) 
+                      if d['type'] == 'M' and n != m and not self.G.has_edge(m, n)]
+        if not candidates:
+            return False
+        j = self.choose_peer_pref_attach(candidates)
+        self.G.add_edge(m, j, type='peer', customer='none')
+        return True
 
     def add_cp_peering_link(self, cp, to_kind):
         """Add a peering link to a content provider (CP) node.
@@ -171,7 +222,17 @@ class AS_graph_generator:
         -------
         success: boolean
         """
-        pass
+        assert to_kind in ['M', 'CP']
+        cp_region = self.node_region[cp]
+        candidates = [n for n, d in self.G.nodes(data=True) 
+                      if d['type'] == to_kind and n != cp and not self.G.has_edge(cp, n)
+                      and (isinstance(cp_region, set) and self.node_region[n] in cp_region
+                           or self.node_region[n] == cp_region)]
+        if not candidates:
+            return False
+        j = self.seed.choice(candidates)
+        self.G.add_edge(cp, j, type='peer', customer='none')
+        return True
 
     def graph_regions(self, rn):
         """Initializes AS network regions.
@@ -181,11 +242,17 @@ class AS_graph_generator:
         rn: integer
             Number of regions
         """
-        pass
+        self.n_regions = rn
+        self.node_region = {}
 
     def add_peering_links(self, from_kind, to_kind):
         """Utility function to add peering links among node groups."""
-        pass
+        nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == from_kind]
+        for node in nodes:
+            if from_kind == 'M':
+                self.add_m_peering_link(node, to_kind)
+            elif from_kind == 'CP':
+                self.add_cp_peering_link(node, to_kind)
 
     def generate(self):
         """Generates a random AS network graph as described in [1].
@@ -209,7 +276,27 @@ class AS_graph_generator:
         BGP: The Role of Topology Growth," in IEEE Journal on Selected Areas
         in Communications, vol. 28, no. 8, pp. 1250-1261, October 2010.
         """
-        pass
+        self.G = self.t_graph()
+        self.customers = {}
+        self.providers = {}
+        self.graph_regions(3)
+
+        n = self.n_t
+        for _ in range(self.n_m):
+            self.add_node(n, 'M', 0.5, self.d_m, self.t_m)
+            n += 1
+        for _ in range(self.n_cp):
+            self.add_node(n, 'CP', 0.5, self.d_cp, self.t_cp)
+            n += 1
+        for _ in range(self.n_c):
+            self.add_node(n, 'C', 0.5, self.d_c, self.t_c)
+            n += 1
+
+        self.add_peering_links('M', 'M')
+        self.add_peering_links('CP', 'M')
+        self.add_peering_links('CP', 'CP')
+
+        return self.G
 
 
 @py_random_state(1)
@@ -251,4 +338,8 @@ def random_internet_as_graph(n, seed=None):
        BGP: The Role of Topology Growth," in IEEE Journal on Selected Areas
        in Communications, vol. 28, no. 8, pp. 1250-1261, October 2010.
     """
-    pass
+    if not 1000 <= n <= 10000:
+        raise nx.NetworkXError("n must be between 1000 and 10000")
+    
+    generator = AS_graph_generator(n, seed)
+    return generator.generate()
