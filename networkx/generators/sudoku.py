@@ -88,4 +88,35 @@ def sudoku_graph(n=3):
     .. [3] Wikipedia contributors. "Glossary of Sudoku." Wikipedia, The Free
        Encyclopedia, 3 Dec. 2019. Web. 22 Dec. 2019.
     """
-    pass
+    if not isinstance(n, int) or n < 1:
+        raise NetworkXError("n must be a positive integer")
+
+    G = nx.Graph()
+    n_squared = n * n
+
+    # Add nodes
+    for i in range(n_squared * n_squared):
+        G.add_node(i)
+
+    # Add edges
+    for i in range(n_squared * n_squared):
+        row, col = divmod(i, n_squared)
+        box_row, box_col = divmod(row, n), divmod(col, n)
+
+        # Same row
+        for j in range(n_squared):
+            if j != col:
+                G.add_edge(i, row * n_squared + j)
+
+        # Same column
+        for j in range(n_squared):
+            if j != row:
+                G.add_edge(i, j * n_squared + col)
+
+        # Same box
+        for r in range(box_row[0] * n, (box_row[0] + 1) * n):
+            for c in range(box_col[0] * n, (box_col[0] + 1) * n):
+                if r != row or c != col:
+                    G.add_edge(i, r * n_squared + c)
+
+    return G
