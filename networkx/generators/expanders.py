@@ -34,7 +34,23 @@ def margulis_gabber_galil_graph(n, create_using=None):
         If the graph is directed or not a multigraph.
 
     """
-    pass
+    if create_using is None:
+        G = nx.MultiGraph()
+    else:
+        G = nx.empty_graph(0, create_using)
+        if G.is_directed() or not G.is_multigraph():
+            raise nx.NetworkXError("Margulis-Gabber-Galil graph must be undirected and a multigraph.")
+
+    G.add_nodes_from((x, y) for x in range(n) for y in range(n))
+
+    for x in range(n):
+        for y in range(n):
+            G.add_edge((x, y), ((x + 1) % n, y))
+            G.add_edge((x, y), (x, (y + 1) % n))
+            G.add_edge((x, y), ((x + y) % n, y))
+            G.add_edge((x, y), ((x + y + 1) % n, y))
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -76,7 +92,25 @@ def chordal_cycle_graph(p, create_using=None):
            Birkhäuser Verlag, Basel, 1994.
 
     """
-    pass
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+        if G.is_directed() or G.is_multigraph():
+            raise nx.NetworkXError("Chordal cycle graph must be undirected and not a multigraph.")
+
+    G.add_nodes_from(range(p))
+
+    # Add cycle edges
+    G.add_edges_from((i, (i + 1) % p) for i in range(p))
+
+    # Add chordal edges
+    for i in range(p):
+        inverse = pow(i, p - 2, p)  # Modular multiplicative inverse
+        if i != inverse:
+            G.add_edge(i, inverse)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -121,7 +155,25 @@ def paley_graph(p, create_using=None):
     Cambridge Studies in Advanced Mathematics, 73.
     Cambridge University Press, Cambridge (2001).
     """
-    pass
+    if create_using is None:
+        G = nx.Graph()
+    else:
+        G = nx.empty_graph(0, create_using)
+        if G.is_multigraph():
+            raise nx.NetworkXError("Paley graph must not be a multigraph.")
+
+    G.add_nodes_from(range(p))
+
+    # Compute the set of squares modulo p
+    squares = set((x * x) % p for x in range(1, (p + 1) // 2))
+
+    for x in range(p):
+        for y in range(x + 1, p):
+            diff = (y - x) % p
+            if diff in squares:
+                G.add_edge(x, y)
+
+    return G
 
 
 @nx.utils.decorators.np_random_state('seed')
@@ -238,7 +290,28 @@ def is_regular_expander(G, *, epsilon=0):
     .. [3] Ramanujan graphs, https://en.wikipedia.org/wiki/Ramanujan_graph
 
     """
-    pass
+    import numpy as np
+    
+    if not nx.is_regular(G):
+        return False
+
+    n = G.number_of_nodes()
+    d = nx.degree(G, 0)  # All nodes have the same degree in a regular graph
+    
+    # Compute the adjacency matrix
+    A = nx.adjacency_matrix(G).todense()
+    
+    # Compute eigenvalues
+    eigenvalues = np.linalg.eigvals(A)
+    
+    # Sort eigenvalues in descending order
+    eigenvalues = sorted(eigenvalues, reverse=True)
+    
+    # The second largest eigenvalue in absolute value
+    lambda_2 = max(abs(eigenvalues[1]), abs(eigenvalues[-1]))
+    
+    # Check if lambda_2 is less than or equal to the Alon-Boppana bound plus epsilon
+    return lambda_2 <= 2 * np.sqrt(d - 1) + epsilon
 
 
 @nx.utils.decorators.np_random_state('seed')
@@ -296,4 +369,11 @@ def random_regular_expander_graph(n, d, *, epsilon=0, create_using=None,
     .. [3] Ramanujan graphs, https://en.wikipedia.org/wiki/Ramanujan_graph
 
     """
-    pass
+    rng = np.random.default_rng(seed)
+    
+    for _ in range(max_tries):
+        G = maybe_regular_expander(n, d, create_using=create_using, seed=rng)
+        if is_regular_expander(G, epsilon=epsilon):
+            return G
+    
+    raise nx.NetworkXError(f"Failed to generate a regular expander graph after {max_tries} attempts")
