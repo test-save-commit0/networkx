@@ -147,7 +147,33 @@ def tutte_polynomial(G):
        Structural Analysis of Complex Networks, 2011
        https://arxiv.org/pdf/0803.3079.pdf
     """
-    pass
+    import sympy as sp
+
+    def tutte_recursive(G):
+        if G.number_of_edges() == 0:
+            return sp.sympify(1)
+
+        e = next(iter(G.edges()))
+        G_minus_e = G.copy()
+        G_minus_e.remove_edge(*e)
+
+        if G.is_multigraph():
+            G_contract_e = G.copy()
+            G_contract_e = nx.contracted_edge(G_contract_e, e, self_loops=True)
+        else:
+            G_contract_e = nx.contracted_edge(G, e, self_loops=True)
+
+        if G.has_edge(*e) and G_minus_e.has_edge(*e):
+            return tutte_recursive(G_minus_e)
+        elif G.is_bridge(e):
+            return x * tutte_recursive(G_minus_e)
+        elif G.is_multigraph() and G.number_of_edges(e[0], e[1]) > 1:
+            return y * tutte_recursive(G_contract_e)
+        else:
+            return tutte_recursive(G_minus_e) + tutte_recursive(G_contract_e)
+
+    x, y = sp.symbols('x y')
+    return tutte_recursive(G)
 
 
 @not_implemented_for('directed')
@@ -253,4 +279,23 @@ def chromatic_polynomial(G):
        Discrete Mathematics, 2006
        https://math.mit.edu/~rstan/pubs/pubfiles/18.pdf
     """
-    pass
+    import sympy as sp
+
+    def chromatic_recursive(G):
+        if G.number_of_edges() == 0:
+            return x ** G.number_of_nodes()
+
+        e = next(iter(G.edges()))
+        G_minus_e = G.copy()
+        G_minus_e.remove_edge(*e)
+
+        if G.is_multigraph():
+            G_contract_e = G.copy()
+            G_contract_e = nx.contracted_edge(G_contract_e, e, self_loops=True)
+        else:
+            G_contract_e = nx.contracted_edge(G, e, self_loops=True)
+
+        return chromatic_recursive(G_minus_e) - chromatic_recursive(G_contract_e)
+
+    x = sp.Symbol('x')
+    return chromatic_recursive(G)
