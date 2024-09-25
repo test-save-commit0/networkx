@@ -118,7 +118,21 @@ def to_pandas_adjacency(G, nodelist=None, dtype=None, order=None,
     2  0  0  4
 
     """
-    pass
+    import pandas as pd
+    import numpy as np
+
+    if nodelist is None:
+        nodelist = list(G)
+    nodeset = set(nodelist)
+    if len(nodelist) != len(nodeset):
+        raise nx.NetworkXError("Ambiguous ordering: `nodelist` contained duplicates.")
+
+    A = to_numpy_array(
+        G, nodelist=nodelist, dtype=dtype, order=order,
+        multigraph_weight=multigraph_weight, weight=weight, nonedge=nonedge
+    )
+    df = pd.DataFrame(A, index=nodelist, columns=nodelist)
+    return df
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
