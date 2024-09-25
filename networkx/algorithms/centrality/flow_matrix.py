@@ -17,14 +17,49 @@ class InverseLaplacian:
         self.L1 = L[1:, 1:]
         self.init_solver(L)
 
+    def width(self, L):
+        """Compute the width of the Laplacian matrix."""
+        return min(max(20, L.shape[0] // 10), 100)
+
+    def init_solver(self, L):
+        """Initialize the solver."""
+        pass
+
+    def solve(self, r):
+        """Solve the linear system."""
+        raise NotImplementedError("Subclasses must implement this method")
+
 
 class FullInverseLaplacian(InverseLaplacian):
-    pass
+    def init_solver(self, L):
+        """Initialize the solver by computing the full inverse."""
+        self.IL1 = np.linalg.inv(self.L1)
+
+    def solve(self, r):
+        """Solve the linear system using the full inverse."""
+        return self.IL1 @ r[1:]
 
 
 class SuperLUInverseLaplacian(InverseLaplacian):
-    pass
+    def init_solver(self, L):
+        """Initialize the SuperLU solver."""
+        from scipy.sparse.linalg import splu
+        self.LU = splu(self.L1.tocsc(), permc_spec='MMD_AT_PLUS_A')
+
+    def solve(self, r):
+        """Solve the linear system using SuperLU."""
+        return self.LU.solve(r[1:])
 
 
 class CGInverseLaplacian(InverseLaplacian):
-    pass
+    def init_solver(self, L):
+        """Initialize the Conjugate Gradient solver."""
+        from scipy.sparse.linalg import cg
+        self.cg_solver = cg
+
+    def solve(self, r):
+        """Solve the linear system using Conjugate Gradient method."""
+        x, info = self.cg_solver(self.L1, r[1:])
+        if info != 0:
+            raise nx.NetworkXError("Conjugate Gradient method failed to converge")
+        return x
