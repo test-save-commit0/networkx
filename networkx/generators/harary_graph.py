@@ -63,7 +63,27 @@ def hnm_harary_graph(n, m, create_using=None):
     .. [2] Harary, F. "The Maximum Connectivity of a Graph."
        Proc. Nat. Acad. Sci. USA 48, 1142-1146, 1962.
     """
-    pass
+    if n < 1:
+        raise nx.NetworkXError("n must be at least 1")
+    if m < n - 1:
+        raise nx.NetworkXError("m must be at least n-1")
+    if m > n * (n - 1) // 2:
+        raise nx.NetworkXError("m must be at most n(n-1)/2")
+
+    G = nx.empty_graph(n, create_using)
+    if n == 1:
+        return G
+
+    k = 2 * m // n
+    r = 2 * m % n
+
+    for i in range(n):
+        for j in range(1, k // 2 + 1):
+            G.add_edge(i, (i + j) % n)
+        if i < r:
+            G.add_edge(i, (i + k // 2 + 1) % n)
+
+    return G
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -109,4 +129,26 @@ def hkn_harary_graph(k, n, create_using=None):
     .. [2] Harary, F. "The Maximum Connectivity of a Graph."
       Proc. Nat. Acad. Sci. USA 48, 1142-1146, 1962.
     """
-    pass
+    if k < 1:
+        raise nx.NetworkXError("k must be at least 1")
+    if n < k + 1:
+        raise nx.NetworkXError("n must be at least k+1")
+
+    G = nx.empty_graph(n, create_using)
+
+    if k == 1:
+        G.add_edges_from([(i, (i + 1) % n) for i in range(n)])
+    elif k % 2 == 0:
+        for i in range(n):
+            for j in range(1, k // 2 + 1):
+                G.add_edge(i, (i + j) % n)
+                G.add_edge(i, (i - j) % n)
+    else:  # k is odd
+        for i in range(n):
+            for j in range(1, (k - 1) // 2 + 1):
+                G.add_edge(i, (i + j) % n)
+                G.add_edge(i, (i - j) % n)
+        for i in range(n // 2):
+            G.add_edge(i, i + n // 2)
+
+    return G
