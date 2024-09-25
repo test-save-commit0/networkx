@@ -49,7 +49,10 @@ def efficiency(G, u, v):
            <https://doi.org/10.1103/PhysRevLett.87.198701>
 
     """
-    pass
+    try:
+        return 1 / nx.shortest_path_length(G, u, v)
+    except NetworkXNoPath:
+        return 0.0
 
 
 @not_implemented_for('directed')
@@ -94,7 +97,13 @@ def global_efficiency(G):
            <https://doi.org/10.1103/PhysRevLett.87.198701>
 
     """
-    pass
+    n = len(G)
+    if n < 2:
+        return 0.0
+    
+    denom = n * (n - 1)
+    efficiency_sum = sum(efficiency(G, u, v) for u in G.nodes() for v in G.nodes() if u != v)
+    return efficiency_sum / denom
 
 
 @not_implemented_for('directed')
@@ -140,4 +149,11 @@ def local_efficiency(G):
            <https://doi.org/10.1103/PhysRevLett.87.198701>
 
     """
-    pass
+    efficiency_sum = 0
+    for node in G:
+        neighbors = list(G.neighbors(node))
+        if len(neighbors) < 2:
+            continue
+        subgraph = G.subgraph(neighbors)
+        efficiency_sum += global_efficiency(subgraph)
+    return efficiency_sum / len(G)
