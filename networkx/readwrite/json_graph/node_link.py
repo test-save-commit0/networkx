@@ -17,7 +17,9 @@ def _to_tuple(x):
     >>> _to_tuple([1, 2, [3, 4]])
     (1, 2, (3, 4))
     """
-    pass
+    if isinstance(x, list):
+        return tuple(_to_tuple(i) for i in x)
+    return x
 
 
 def node_link_data(G, *, source='source', target='target', name='id', key=
@@ -92,7 +94,43 @@ def node_link_data(G, *, source='source', target='target', name='id', key=
     --------
     node_link_graph, adjacency_data, tree_data
     """
-    pass
+    multigraph = G.is_multigraph()
+    directed = G.is_directed()
+
+    nodes = [
+        {name: _to_tuple(n), **{str(k): v for k, v in G.nodes[n].items()}}
+        for n in G
+    ]
+
+    if multigraph:
+        links = [
+            {
+                source: _to_tuple(u),
+                target: _to_tuple(v),
+                key: k,
+                **{str(k): v for k, v in G[u][v][k].items()},
+            }
+            for u, v, k in G.edges(keys=True)
+        ]
+    else:
+        links = [
+            {
+                source: _to_tuple(u),
+                target: _to_tuple(v),
+                **{str(k): v for k, v in G[u][v].items()},
+            }
+            for u, v in G.edges()
+        ]
+
+    graph = {str(k): v for k, v in G.graph.items()}
+
+    return {
+        "directed": directed,
+        "multigraph": multigraph,
+        "graph": graph,
+        "nodes": nodes,
+        link: links,
+    }
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -164,4 +202,31 @@ def node_link_graph(data, directed=False, multigraph=True, *, source=
     --------
     node_link_data, adjacency_data, tree_data
     """
-    pass
+    multigraph = data.get('multigraph', multigraph)
+    directed = data.get('directed', directed)
+    if multigraph:
+        graph = nx.MultiGraph()
+    else:
+        graph = nx.Graph()
+    if directed:
+        graph = graph.to_directed()
+
+    graph.graph.update(data.get('graph', {}))
+
+    for node_data in data['nodes']:
+        node = _to_tuple(node_data[name])
+        nodeattr = {str(k): v for k, v in node_data.items() if k != name}
+        graph.add_node(node, **nodeattr)
+
+    for link_data in data[link]:
+        src = _to_tuple(link_data[source])
+        tgt = _to_tuple(link_data[target])
+        if multigraph:
+            k = link_data.get(key, None)
+            edgeattr = {str(k): v for k, v in link_data.items() if k not in (source, target, key)}
+            graph.add_edge(src, tgt, key=k, **edgeattr)
+        else:
+            edgeattr = {str(k): v for k, v in link_data.items() if k not in (source, target)}
+            graph.add_edge(src, tgt, **edgeattr)
+
+    return graph
