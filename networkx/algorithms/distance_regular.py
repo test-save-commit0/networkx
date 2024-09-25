@@ -51,7 +51,29 @@ def is_distance_regular(G):
         http://mathworld.wolfram.com/Distance-RegularGraph.html
 
     """
-    pass
+    if not nx.is_connected(G):
+        return False
+    
+    d = diameter(G)
+    n = G.number_of_nodes()
+    
+    for u in G.nodes():
+        distances = nx.single_source_shortest_path_length(G, u)
+        level_sizes = [0] * (d + 1)
+        for v, dist in distances.items():
+            level_sizes[dist] += 1
+        
+        for v in G.nodes():
+            if u != v:
+                v_distances = nx.single_source_shortest_path_length(G, v)
+                v_level_sizes = [0] * (d + 1)
+                for w, dist in v_distances.items():
+                    v_level_sizes[dist] += 1
+                
+                if level_sizes != v_level_sizes:
+                    return False
+    
+    return True
 
 
 def global_parameters(b, c):
@@ -95,7 +117,13 @@ def global_parameters(b, c):
     --------
     intersection_array
     """
-    pass
+    d = len(b)
+    k = b[0]
+    for i in range(d + 1):
+        c_i = c[i] if i > 0 else 0
+        b_i = b[i] if i < d else 0
+        a_i = k - b_i - c_i
+        yield (c_i, a_i, b_i)
 
 
 @not_implemented_for('directed')
@@ -136,7 +164,32 @@ def intersection_array(G):
     --------
     global_parameters
     """
-    pass
+    if not is_distance_regular(G):
+        raise nx.NetworkXError("Graph is not distance regular.")
+    
+    d = diameter(G)
+    n = G.number_of_nodes()
+    k = G.degree(list(G.nodes())[0])
+    
+    b = [0] * d
+    c = [0] * (d + 1)
+    
+    for i in range(d):
+        u = list(G.nodes())[0]
+        distances = nx.single_source_shortest_path_length(G, u)
+        nodes_at_dist_i = [v for v, dist in distances.items() if dist == i]
+        nodes_at_dist_i_plus_1 = [v for v, dist in distances.items() if dist == i + 1]
+        
+        if i == 0:
+            b[i] = len(nodes_at_dist_i_plus_1)
+        else:
+            v = nodes_at_dist_i[0]
+            b[i] = sum(1 for w in G.neighbors(v) if distances[w] == i + 1)
+            c[i] = sum(1 for w in G.neighbors(v) if distances[w] == i - 1)
+    
+    c[d] = k - b[d-1]
+    
+    return b, c[1:]
 
 
 @not_implemented_for('directed')
@@ -181,4 +234,32 @@ def is_strongly_regular(G):
         True
 
     """
-    pass
+    if not nx.is_regular(G):
+        return False
+
+    n = G.number_of_nodes()
+    if n < 3:
+        return True
+
+    degrees = list(dict(G.degree()).values())
+    k = degrees[0]
+
+    # Check if the graph is regular
+    if not all(d == k for d in degrees):
+        return False
+
+    # Check common neighbors for adjacent and non-adjacent pairs
+    adj_common = set()
+    non_adj_common = set()
+
+    for u in G:
+        for v in G:
+            if u != v:
+                common = len(set(G.neighbors(u)) & set(G.neighbors(v)))
+                if G.has_edge(u, v):
+                    adj_common.add(common)
+                else:
+                    non_adj_common.add(common)
+
+    # For strongly regular graphs, adj_common and non_adj_common should each have only one value
+    return len(adj_common) == 1 and len(non_adj_common) == 1
