@@ -12,7 +12,90 @@ __all__ = ['preflow_push']
 def preflow_push_impl(G, s, t, capacity, residual, global_relabel_freq,
     value_only):
     """Implementation of the highest-label preflow-push algorithm."""
-    pass
+    def push(u, v):
+        flow = min(R.nodes[u]['excess'], R[u][v]['capacity'] - R[u][v]['flow'])
+        if flow > 0:
+            R[u][v]['flow'] += flow
+            R[v][u]['flow'] -= flow
+            R.nodes[u]['excess'] -= flow
+            R.nodes[v]['excess'] += flow
+            return flow
+        return 0
+
+    def relabel(u):
+        min_height = float('inf')
+        for v in R[u]:
+            if R[u][v]['flow'] < R[u][v]['capacity']:
+                min_height = min(min_height, R.nodes[v]['height'])
+        R.nodes[u]['height'] = min_height + 1
+
+    def discharge(u):
+        while R.nodes[u]['excess'] > 0:
+            if not R.nodes[u]['current_edge']:
+                relabel(u)
+                R.nodes[u]['current_edge'] = CurrentEdge(R[u])
+            else:
+                v = R.nodes[u]['current_edge']
+                if (R[u][v]['flow'] < R[u][v]['capacity'] and
+                    R.nodes[u]['height'] > R.nodes[v]['height']):
+                    push(u, v)
+                else:
+                    R.nodes[u]['current_edge'].move_to_next()
+
+    def global_relabeling():
+        heights = {node: float('inf') for node in R}
+        heights[t] = 0
+        q = deque([t])
+        seen = set([t])
+        while q:
+            u = q.popleft()
+            height = heights[u] + 1
+            for v in R.predecessors(u):
+                if v not in seen and R[v][u]['flow'] < R[v][u]['capacity']:
+                    heights[v] = height
+                    seen.add(v)
+                    q.append(v)
+        for node in R:
+            R.nodes[node]['height'] = heights[node]
+            R.nodes[node]['current_edge'] = CurrentEdge(R[node])
+
+    if not isinstance(residual, nx.DiGraph):
+        R = build_residual_network(G, capacity)
+    else:
+        R = residual
+
+    # Initialize preflow
+    R.graph['flow_value'] = 0
+    for u in R:
+        R.nodes[u]['excess'] = 0
+        R.nodes[u]['height'] = 0
+        R.nodes[u]['current_edge'] = CurrentEdge(R[u])
+    R.nodes[s]['height'] = len(R)
+
+    for u, v in R.out_edges(s):
+        flow = R[u][v]['capacity']
+        R[u][v]['flow'] = flow
+        R[v][u]['flow'] = -flow
+        R.nodes[u]['excess'] -= flow
+        R.nodes[v]['excess'] += flow
+
+    if global_relabel_freq is not None:
+        global_relabel_threshold = GlobalRelabelThreshold(R, global_relabel_freq)
+
+    # Main loop
+    active = {u for u in R if u not in (s, t) and R.nodes[u]['excess'] > 0}
+    while active:
+        u = max(active, key=lambda x: R.nodes[x]['height'])
+        discharge(u)
+        active = {u for u in R if u not in (s, t) and R.nodes[u]['excess'] > 0}
+        if global_relabel_freq is not None:
+            if global_relabel_threshold():
+                global_relabeling()
+
+    if not value_only:
+        return R
+    else:
+        return R.nodes[t]['excess']
 
 
 @nx._dispatchable(edge_attrs={'capacity': float('inf')}, returns_graph=True)
@@ -145,4 +228,19 @@ def preflow_push(G, s, t, capacity='capacity', residual=None,
     True
 
     """
-    pass
+    R = preflow_push_impl(G, s, t, capacity, residual, global_relabel_freq, value_only)
+    
+    if value_only:
+        # R is the flow value in this case
+        return R
+    
+    # Detect infinite-capacity paths
+    if detect_unboundedness(R, s, t):
+        raise nx.NetworkXUnbounded(
+            "Infinite capacity path, flow unbounded above."
+        )
+    
+    # Add the flow value to the graph
+    R.graph['flow_value'] = R.nodes[t]['excess']
+    
+    return R
