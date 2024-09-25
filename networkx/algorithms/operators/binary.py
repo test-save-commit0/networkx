@@ -60,7 +60,30 @@ def union(G, H, rename=()):
 
 
     """
-    pass
+    R = G.__class__()
+    R.add_nodes_from(G)
+    R.add_edges_from(G.edges())
+    R.update(H)
+
+    def add_prefix(graph, prefix):
+        if not prefix:
+            return graph
+        return nx.relabel_nodes(graph, {n: f"{prefix}{n}" for n in graph})
+
+    G = add_prefix(G, rename[0] if rename else "")
+    H = add_prefix(H, rename[1] if rename else "")
+
+    R = G.__class__()
+    R.add_nodes_from(G)
+    R.add_edges_from(G.edges())
+    R.add_nodes_from(H)
+    R.add_edges_from(H.edges())
+
+    # Combine attributes
+    R.graph.update(G.graph)
+    R.graph.update(H.graph)
+
+    return R
 
 
 @nx._dispatchable(graphs=_G_H, preserve_all_attrs=True, returns_graph=True)
@@ -114,7 +137,22 @@ def disjoint_union(G, H):
     >>> U.edges
     EdgeView([(0, 1), (0, 2), (1, 2), (3, 4), (4, 6), (5, 6)])
     """
-    pass
+    R = G.__class__()
+    G_len = len(G)
+    G_relabel = {n: i for i, n in enumerate(G)}
+    H_relabel = {n: i + G_len for i, n in enumerate(H)}
+
+    R.add_nodes_from((G_relabel[n], d.copy()) for n, d in G.nodes(data=True))
+    R.add_edges_from((G_relabel[u], G_relabel[v], d.copy()) for u, v, d in G.edges(data=True))
+
+    R.add_nodes_from((H_relabel[n], d.copy()) for n, d in H.nodes(data=True))
+    R.add_edges_from((H_relabel[u], H_relabel[v], d.copy()) for u, v, d in H.edges(data=True))
+
+    # Combine graph attributes
+    R.graph.update(G.graph)
+    R.graph.update(H.graph)
+
+    return R
 
 
 @nx._dispatchable(graphs=_G_H, returns_graph=True)
@@ -159,7 +197,22 @@ def intersection(G, H):
     >>> R.edges
     EdgeView([(1, 2)])
     """
-    pass
+    if G.is_multigraph() != H.is_multigraph():
+        raise nx.NetworkXError("G and H must both be graphs or multigraphs.")
+    
+    R = G.__class__()
+    R.add_nodes_from(n for n in G if n in H)
+    
+    if G.is_multigraph():
+        R.add_edges_from((u, v, k, d.copy())
+            for u, v, k, d in G.edges(keys=True, data=True)
+            if H.has_edge(u, v) and k in H[u][v])
+    else:
+        R.add_edges_from((u, v, d.copy())
+            for u, v, d in G.edges(data=True)
+            if H.has_edge(u, v))
+    
+    return R
 
 
 @nx._dispatchable(graphs=_G_H, returns_graph=True)
@@ -199,7 +252,22 @@ def difference(G, H):
     >>> R.edges
     EdgeView([(0, 2), (1, 3)])
     """
-    pass
+    if set(G) != set(H):
+        raise nx.NetworkXError("Node sets of graphs are not equal")
+
+    R = G.__class__()
+    R.add_nodes_from(G)
+    
+    if G.is_multigraph():
+        R.add_edges_from((u, v, k, d.copy())
+            for u, v, k, d in G.edges(keys=True, data=True)
+            if not H.has_edge(u, v) or k not in H[u][v])
+    else:
+        R.add_edges_from((u, v, d.copy())
+            for u, v, d in G.edges(data=True)
+            if not H.has_edge(u, v))
+    
+    return R
 
 
 @nx._dispatchable(graphs=_G_H, returns_graph=True)
@@ -232,7 +300,28 @@ def symmetric_difference(G, H):
     >>> R.edges
     EdgeView([(0, 2), (0, 3), (1, 3)])
     """
-    pass
+    if set(G) != set(H):
+        raise nx.NetworkXError("Node sets of graphs are not equal")
+
+    R = G.__class__()
+    R.add_nodes_from(G)
+    
+    if G.is_multigraph():
+        R.add_edges_from((u, v, k, d.copy())
+            for u, v, k, d in G.edges(keys=True, data=True)
+            if not H.has_edge(u, v) or k not in H[u][v])
+        R.add_edges_from((u, v, k, d.copy())
+            for u, v, k, d in H.edges(keys=True, data=True)
+            if not G.has_edge(u, v) or k not in G[u][v])
+    else:
+        R.add_edges_from((u, v, d.copy())
+            for u, v, d in G.edges(data=True)
+            if not H.has_edge(u, v))
+        R.add_edges_from((u, v, d.copy())
+            for u, v, d in H.edges(data=True)
+            if not G.has_edge(u, v))
+    
+    return R
 
 
 @nx._dispatchable(graphs=_G_H, preserve_all_attrs=True, returns_graph=True)
@@ -313,7 +402,21 @@ def compose(G, H):
     >>> print(GcomposeH.edges[(3, 0)]["weight"])
     100.0
     """
-    pass
+    R = G.__class__()
+    R.add_nodes_from(G.nodes(data=True))
+    R.add_edges_from(G.edges(data=True))
+    
+    R.add_nodes_from(H.nodes(data=True))
+    if G.is_multigraph():
+        R.add_edges_from(H.edges(keys=True, data=True))
+    else:
+        R.add_edges_from(H.edges(data=True))
+    
+    # Update graph attributes
+    R.graph.update(G.graph)
+    R.graph.update(H.graph)
+    
+    return R
 
 
 @nx._dispatchable(graphs=_G_H, preserve_all_attrs=True, returns_graph=True)
@@ -370,4 +473,29 @@ def full_join(G, H, rename=(None, None)):
     union
     disjoint_union
     """
-    pass
+    def add_prefix(graph, prefix):
+        if not prefix:
+            return graph
+        return nx.relabel_nodes(graph, {n: f"{prefix}{n}" for n in graph})
+
+    G = add_prefix(G, rename[0])
+    H = add_prefix(H, rename[1])
+
+    if set(G) & set(H):
+        raise nx.NetworkXError("Node sets of G and H are not disjoint.")
+
+    R = G.__class__()
+    R.add_nodes_from(G)
+    R.add_edges_from(G.edges(data=True))
+    R.add_nodes_from(H)
+    R.add_edges_from(H.edges(data=True))
+
+    R.add_edges_from((n, m) for n in G for m in H)
+    if R.is_directed():
+        R.add_edges_from((m, n) for n in G for m in H)
+
+    # Combine attributes
+    R.graph.update(G.graph)
+    R.graph.update(H.graph)
+
+    return R
