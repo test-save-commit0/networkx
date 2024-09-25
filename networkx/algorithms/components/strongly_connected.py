@@ -63,7 +63,37 @@ def strongly_connected_components(G):
        Information Processing Letters 49(1): 9-14, (1994)..
 
     """
-    pass
+    def _strong_connect(v):
+        index[v] = len(index)
+        lowlink[v] = index[v]
+        stack.append(v)
+        on_stack[v] = True
+
+        for w in G[v]:
+            if w not in index:
+                _strong_connect(w)
+                lowlink[v] = min(lowlink[v], lowlink[w])
+            elif on_stack[w]:
+                lowlink[v] = min(lowlink[v], index[w])
+
+        if lowlink[v] == index[v]:
+            component = set()
+            while True:
+                w = stack.pop()
+                on_stack[w] = False
+                component.add(w)
+                if w == v:
+                    break
+            yield component
+
+    index = {}
+    lowlink = {}
+    stack = []
+    on_stack = {}
+
+    for v in G:
+        if v not in index:
+            yield from _strong_connect(v)
 
 
 @not_implemented_for('undirected')
@@ -115,7 +145,34 @@ def kosaraju_strongly_connected_components(G, source=None):
     Uses Kosaraju's algorithm.
 
     """
-    pass
+    def dfs_first_pass(v):
+        visited.add(v)
+        for w in G[v]:
+            if w not in visited:
+                dfs_first_pass(w)
+        stack.append(v)
+
+    def dfs_second_pass(v):
+        component.add(v)
+        visited.add(v)
+        for w in G_reversed[v]:
+            if w not in visited:
+                dfs_second_pass(w)
+
+    stack = []
+    visited = set()
+    for v in G:
+        if v not in visited:
+            dfs_first_pass(v)
+
+    G_reversed = G.reverse(copy=False)
+    visited.clear()
+    while stack:
+        v = stack.pop()
+        if v not in visited:
+            component = set()
+            dfs_second_pass(v)
+            yield component
 
 
 @not_implemented_for('undirected')
@@ -186,7 +243,45 @@ def strongly_connected_components_recursive(G):
        Information Processing Letters 49(1): 9-14, (1994)..
 
     """
-    pass
+    import warnings
+    warnings.warn(
+        "strongly_connected_components_recursive is deprecated and will be removed in NetworkX 4.0. "
+        "Use strongly_connected_components instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    
+    def _strong_connect(v):
+        index[v] = len(index)
+        lowlink[v] = index[v]
+        stack.append(v)
+        on_stack[v] = True
+
+        for w in G[v]:
+            if w not in index:
+                yield from _strong_connect(w)
+                lowlink[v] = min(lowlink[v], lowlink[w])
+            elif on_stack[w]:
+                lowlink[v] = min(lowlink[v], index[w])
+
+        if lowlink[v] == index[v]:
+            component = set()
+            while True:
+                w = stack.pop()
+                on_stack[w] = False
+                component.add(w)
+                if w == v:
+                    break
+            yield component
+
+    index = {}
+    lowlink = {}
+    stack = []
+    on_stack = {}
+
+    for v in G:
+        if v not in index:
+            yield from _strong_connect(v)
 
 
 @not_implemented_for('undirected')
@@ -227,7 +322,7 @@ def number_strongly_connected_components(G):
     -----
     For directed graphs only.
     """
-    pass
+    return sum(1 for _ in strongly_connected_components(G))
 
 
 @not_implemented_for('undirected')
@@ -274,7 +369,9 @@ def is_strongly_connected(G):
     -----
     For directed graphs only.
     """
-    pass
+    if len(G) == 0:
+        return True
+    return len(next(strongly_connected_components(G))) == len(G)
 
 
 @not_implemented_for('undirected')
@@ -340,4 +437,19 @@ def condensation(G, scc=None):
     the resulting graph is a directed acyclic graph.
 
     """
-    pass
+    if scc is None:
+        scc = strongly_connected_components(G)
+    mapping = {}
+    members = {}
+    C = nx.DiGraph()
+    for i, component in enumerate(scc):
+        members[i] = component
+        mapping.update((n, i) for n in component)
+    number_of_components = i + 1
+    C.add_nodes_from(range(number_of_components))
+    C.add_edges_from((mapping[u], mapping[v]) for u, v in G.edges() if mapping[u] != mapping[v])
+    # Add a list of members (ie original nodes) to each node (ie scc) in C.
+    nx.set_node_attributes(C, members, "members")
+    # Add mapping dict as graph attribute
+    C.graph["mapping"] = mapping
+    return C
