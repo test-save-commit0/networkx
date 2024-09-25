@@ -62,4 +62,38 @@ def bethe_hessian_matrix(G, r=None, nodelist=None):
        "Estimating the number of communities in networks by spectral methods"
        arXiv:1507.00827, 2015.
     """
-    pass
+    import numpy as np
+    import scipy.sparse as sp
+
+    if nodelist is None:
+        nodelist = list(G)
+    
+    if r is None:
+        # Calculate the default regularizer r_m
+        degrees = [d for n, d in G.degree()]
+        sum_k = sum(degrees)
+        sum_k_squared = sum(d**2 for d in degrees)
+        r = (sum_k_squared / sum_k) - 1
+    
+    n = len(nodelist)
+    index = {node: i for i, node in enumerate(nodelist)}
+    
+    # Create the adjacency matrix
+    row, col = zip(*G.edges())
+    data = [1] * len(row)
+    row = [index[u] for u in row]
+    col = [index[v] for v in col]
+    A = sp.csr_array((data, (row, col)), shape=(n, n))
+    A = A + A.T  # Make sure the adjacency matrix is symmetric
+    
+    # Create the degree matrix
+    degrees = [G.degree(node) for node in nodelist]
+    D = sp.diags(degrees)
+    
+    # Create the identity matrix
+    I = sp.eye(n)
+    
+    # Calculate the Bethe Hessian matrix
+    H = (r**2 - 1) * I - r * A + D
+    
+    return H
