@@ -71,11 +71,11 @@ def number_of_walks(G, walk_length):
     # Initialize the result dictionary
     result = {n: {m: 0 for m in G} for n in G}
     
-    # For walk_length = 1, the result is the adjacency matrix
+    # For walk_length = 1, use the adjacency view
     if walk_length == 1:
-        for u, v in G.edges():
-            result[u][v] += 1
-            result[v][u] += 1
+        for u in G:
+            for v in G.adj[u]:
+                result[u][v] += 1
         return result
     
     # For walk_length > 1, use matrix multiplication
