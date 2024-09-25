@@ -65,7 +65,68 @@ def _greedy_modularity_communities_generator(G, weight=None, resolution=1):
     .. [4] Newman, M. E. J."Analysis of weighted networks"
        Physical Review E 70(5 Pt 2):056131, 2004.
     """
-    pass
+    # Initialize each node to its own community
+    communities = {node: frozenset([node]) for node in G}
+    degrees = dict(G.degree(weight=weight))
+    m = sum(degrees.values()) / 2
+
+    # Calculate initial modularity
+    Q = modularity(G, communities.values(), weight=weight, resolution=resolution)
+
+    # Initialize data structures for efficient updates
+    community_edges = defaultdict(int)
+    community_degrees = defaultdict(int)
+    for u, v, w in G.edges(data=weight, default=1):
+        c1, c2 = communities[u], communities[v]
+        community_edges[c1, c2] += w
+        community_edges[c2, c1] += w
+        community_degrees[c1] += w
+        if u != v:
+            community_degrees[c2] += w
+
+    # Main loop
+    while len(communities) > 1:
+        best_merge = None
+        best_dq = -1
+
+        # Find the best merge
+        for c1, c2 in community_edges:
+            if c1 != c2:
+                dq = 2 * (community_edges[c1, c2] - resolution * community_degrees[c1] * community_degrees[c2] / (2 * m))
+                if dq > best_dq:
+                    best_dq = dq
+                    best_merge = (c1, c2)
+
+        if best_merge is None:
+            break
+
+        # Perform the merge
+        c1, c2 = best_merge
+        new_community = c1.union(c2)
+        del communities[list(c2)[0]]
+        for node in c2:
+            communities[node] = new_community
+
+        # Update data structures
+        for other_c in set(community_edges):
+            if other_c != c1 and other_c != c2:
+                community_edges[new_community, other_c] = community_edges[c1, other_c] + community_edges[c2, other_c]
+                community_edges[other_c, new_community] = community_edges[new_community, other_c]
+        community_degrees[new_community] = community_degrees[c1] + community_degrees[c2]
+        del community_degrees[c2]
+
+        # Clean up old entries
+        for k in list(community_edges.keys()):
+            if c1 in k or c2 in k:
+                del community_edges[k]
+
+        # Yield results
+        yield best_dq
+        yield communities.values()
+
+    # Yield final partition
+    yield 0
+    yield communities.values()
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -149,7 +210,34 @@ def greedy_modularity_communities(G, weight=None, resolution=1, cutoff=1,
     .. [4] Newman, M. E. J."Analysis of weighted networks"
        Physical Review E 70(5 Pt 2):056131, 2004.
     """
-    pass
+    # Input validation
+    n = G.number_of_nodes()
+    if cutoff not in range(1, n + 1):
+        raise ValueError(f"cutoff must be in [1, {n}]")
+    if best_n is not None:
+        if best_n not in range(1, n + 1):
+            raise ValueError(f"best_n must be in [1, {n}]")
+        if best_n < cutoff:
+            raise ValueError("best_n must be greater than or equal to cutoff")
+
+    # Run the generator
+    communities = None
+    modularity = -1
+    for dq, partition in _greedy_modularity_communities_generator(G, weight, resolution):
+        if len(partition) < cutoff:
+            break
+        if dq < 0 and best_n is None:
+            break
+        communities = partition
+        modularity += dq
+        if best_n is not None and len(communities) <= best_n:
+            break
+
+    # If no valid partition was found, return trivial partition
+    if communities is None:
+        communities = [frozenset([n]) for n in G]
+
+    return sorted(communities, key=len, reverse=True)
 
 
 @not_implemented_for('directed')
@@ -201,4 +289,31 @@ def naive_greedy_modularity_communities(G, resolution=1, weight=None):
     greedy_modularity_communities
     modularity
     """
-    pass
+    # Start with each node in its own community
+    communities = [{node} for node in G.nodes()]
+    
+    while len(communities) > 1:
+        best_merge = None
+        best_increase = 0
+        
+        for i, comm1 in enumerate(communities):
+            for j, comm2 in enumerate(communities[i+1:], start=i+1):
+                new_comm = comm1.union(comm2)
+                old_modularity = modularity(G, communities, resolution=resolution, weight=weight)
+                new_communities = [c for k, c in enumerate(communities) if k != i and k != j]
+                new_communities.append(new_comm)
+                new_modularity = modularity(G, new_communities, resolution=resolution, weight=weight)
+                increase = new_modularity - old_modularity
+                
+                if increase > best_increase:
+                    best_increase = increase
+                    best_merge = (i, j)
+        
+        if best_merge is None:
+            break
+        
+        i, j = best_merge
+        communities[i] = communities[i].union(communities[j])
+        communities.pop(j)
+    
+    return sorted(communities, key=len, reverse=True)
