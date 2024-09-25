@@ -83,7 +83,18 @@ def draw(G, pos=None, ax=None, **kwds):
     Also see the NetworkX drawing examples at
     https://networkx.org/documentation/latest/auto_examples/index.html
     """
-    pass
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        ax = plt.gca()
+    
+    if pos is None:
+        pos = nx.spring_layout(G)
+    
+    draw_networkx(G, pos=pos, ax=ax, **kwds)
+    ax.set_axis_off()
+    plt.tight_layout()
+    return ax
 
 
 def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
@@ -237,7 +248,24 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
     draw_networkx_labels
     draw_networkx_edge_labels
     """
-    pass
+    import matplotlib.pyplot as plt
+
+    if pos is None:
+        pos = nx.spring_layout(G)
+
+    ax = kwds.get('ax', plt.gca())
+    
+    node_collection = draw_networkx_nodes(G, pos, **kwds)
+    edge_collection = draw_networkx_edges(G, pos, arrows=arrows, **kwds)
+    
+    if with_labels:
+        draw_networkx_labels(G, pos, **kwds)
+
+    if hide_ticks:
+        ax.set_axis_off()
+
+    plt.draw_if_interactive()
+    return node_collection, edge_collection
 
 
 def draw_networkx_nodes(G, pos, nodelist=None, node_size=300, node_color=
@@ -333,7 +361,39 @@ def draw_networkx_nodes(G, pos, nodelist=None, node_size=300, node_color=
     draw_networkx_labels
     draw_networkx_edge_labels
     """
-    pass
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    if ax is None:
+        ax = plt.gca()
+
+    if nodelist is None:
+        nodelist = list(G)
+
+    xy = np.asarray([pos[v] for v in nodelist])
+
+    node_collection = ax.scatter(
+        xy[:, 0], xy[:, 1],
+        s=node_size,
+        c=node_color,
+        marker=node_shape,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
+        linewidths=linewidths,
+        edgecolors=edgecolors,
+        label=label
+    )
+
+    if margins is not None:
+        ax.margins(margins)
+
+    if hide_ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    return node_collection
 
 
 class FancyArrowFactory:
