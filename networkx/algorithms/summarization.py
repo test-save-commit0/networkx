@@ -243,7 +243,30 @@ def _snap_build_graph(G, groups, node_attributes, edge_attributes,
     -------
     summary graph: Networkx graph
     """
-    pass
+    summary_graph = nx.Graph()
+    
+    for group_id, nodes in groups.items():
+        supernode_name = f"{prefix}{group_id}"
+        supernode_attrs = {attr: G.nodes[nodes[0]][attr] for attr in node_attributes}
+        supernode_attrs[supernode_attribute] = list(nodes)
+        summary_graph.add_node(supernode_name, **supernode_attrs)
+    
+    for node in G.nodes():
+        group_id = next(gid for gid, nodes in groups.items() if node in nodes)
+        supernode = f"{prefix}{group_id}"
+        
+        for neighbor in G.neighbors(node):
+            neighbor_group_id = next(gid for gid, nodes in groups.items() if neighbor in nodes)
+            neighbor_supernode = f"{prefix}{neighbor_group_id}"
+            
+            if not summary_graph.has_edge(supernode, neighbor_supernode):
+                edge_type = tuple(G.get_edge_data(node, neighbor).get(attr) for attr in edge_attributes)
+                summary_graph.add_edge(supernode, neighbor_supernode, **{superedge_attribute: [edge_type]})
+            else:
+                edge_type = tuple(G.get_edge_data(node, neighbor).get(attr) for attr in edge_attributes)
+                summary_graph[supernode][neighbor_supernode][superedge_attribute].append(edge_type)
+    
+    return summary_graph
 
 
 def _snap_eligible_group(G, groups, group_lookup, edge_types):
@@ -269,7 +292,24 @@ def _snap_eligible_group(G, groups, group_lookup, edge_types):
     -------
     tuple: group ID to split, and neighbor-groups participation_counts data structure
     """
-    pass
+    for group_id, nodes in groups.items():
+        participation_counts = {}
+        for node in nodes:
+            node_participation = set()
+            for neighbor in G.neighbors(node):
+                neighbor_group = group_lookup[neighbor]
+                edge_type = edge_types.get(frozenset([node, neighbor]), ())
+                node_participation.add((neighbor_group, edge_type))
+            
+            participation_key = frozenset(node_participation)
+            if participation_key not in participation_counts:
+                participation_counts[participation_key] = 0
+            participation_counts[participation_key] += 1
+        
+        if len(participation_counts) > 1:
+            return group_id, participation_counts
+    
+    return None, None
 
 
 def _snap_split(groups, neighbor_info, group_lookup, group_id):
@@ -300,7 +340,26 @@ def _snap_split(groups, neighbor_info, group_lookup, group_id):
     dict
         The updated groups based on the split
     """
-    pass
+    nodes_to_split = groups[group_id]
+    new_groups = {}
+    
+    for node in nodes_to_split:
+        node_key = frozenset((neighbor_group, edge_type) 
+                             for neighbor_group, edge_types in neighbor_info[node].items() 
+                             for edge_type in edge_types)
+        
+        if node_key not in new_groups:
+            new_groups[node_key] = []
+        new_groups[node_key].append(node)
+    
+    del groups[group_id]
+    for i, (_, nodes) in enumerate(new_groups.items()):
+        new_group_id = f"{group_id}-{i}"
+        groups[new_group_id] = nodes
+        for node in nodes:
+            group_lookup[node] = new_group_id
+    
+    return groups
 
 
 @nx._dispatchable(node_attrs='[node_attributes]', edge_attrs=
