@@ -48,7 +48,41 @@ def tree_broadcast_center(G):
     .. [1] Slater, P.J., Cockayne, E.J., Hedetniemi, S.T,
        Information dissemination in trees. SIAM J.Comput. 10(4), 692–701 (1981)
     """
-    pass
+    if not nx.is_tree(G):
+        raise NetworkXError("The graph G must be a tree.")
+
+    def dfs(node, parent):
+        max_subtree_height = 0
+        for neighbor in G[node]:
+            if neighbor != parent:
+                subtree_height = dfs(neighbor, node)
+                max_subtree_height = max(max_subtree_height, subtree_height)
+        return max_subtree_height + 1
+
+    # First DFS to find the height of each subtree
+    root = next(iter(G))  # Choose an arbitrary root
+    heights = {node: dfs(node, None) for node in G}
+
+    # Second DFS to find the broadcast centers
+    def find_centers(node, parent, depth):
+        nonlocal min_broadcast_time, broadcast_centers
+        max_distance = max(depth, heights[node] - 1)
+        
+        if max_distance < min_broadcast_time:
+            min_broadcast_time = max_distance
+            broadcast_centers = {node}
+        elif max_distance == min_broadcast_time:
+            broadcast_centers.add(node)
+
+        for neighbor in G[node]:
+            if neighbor != parent:
+                find_centers(neighbor, node, max(depth + 1, heights[node] - 1))
+
+    min_broadcast_time = float('inf')
+    broadcast_centers = set()
+    find_centers(root, None, 0)
+
+    return min_broadcast_time, broadcast_centers
 
 
 @not_implemented_for('directed')
@@ -89,4 +123,22 @@ def tree_broadcast_time(G, node=None):
         In Computing and Combinatorics. COCOON 2019
         (Ed. D. Z. Du and C. Tian.) Springer, pp. 240-253, 2019.
     """
-    pass
+    if not nx.is_tree(G):
+        raise NetworkXError("The graph G must be a tree.")
+
+    def dfs(current, parent):
+        max_depth = 0
+        for neighbor in G[current]:
+            if neighbor != parent:
+                depth = dfs(neighbor, current)
+                max_depth = max(max_depth, depth + 1)
+        return max_depth
+
+    if node is None:
+        # If no node is specified, return the broadcast time of the tree
+        return max(dfs(n, None) for n in G)
+    else:
+        # If a node is specified, return its broadcast time
+        if node not in G:
+            raise NetworkXError(f"Node {node} is not in the graph.")
+        return dfs(node, None)
