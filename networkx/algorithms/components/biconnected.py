@@ -71,7 +71,7 @@ def is_biconnected(G):
        Communications of the ACM 16: 372–378. doi:10.1145/362248.362272
 
     """
-    pass
+    return len(list(articulation_points(G))) == 0
 
 
 @not_implemented_for('directed')
@@ -144,7 +144,41 @@ def biconnected_component_edges(G):
            Communications of the ACM 16: 372–378. doi:10.1145/362248.362272
 
     """
-    pass
+    def dfs(G, u, parent, depth, low, visited, stack, components):
+        children = 0
+        visited[u] = depth
+        low[u] = depth
+        for v in G[u]:
+            if v == parent:
+                continue
+            if v not in visited:
+                children += 1
+                stack.append((u, v))
+                dfs(G, v, u, depth + 1, low, visited, stack, components)
+                low[u] = min(low[u], low[v])
+                if (parent is not None and low[v] >= visited[u]) or (parent is None and children > 1):
+                    component = []
+                    while stack and stack[-1] != (u, v):
+                        component.append(stack.pop())
+                    component.append(stack.pop())
+                    components.append(component)
+            elif visited[v] < visited[u]:
+                low[u] = min(low[u], visited[v])
+                stack.append((u, v))
+
+    components = []
+    visited = {}
+    low = {}
+    stack = []
+
+    for start in G:
+        if start not in visited:
+            dfs(G, start, None, 0, low, visited, stack, components)
+        if stack:
+            components.append(stack)
+            stack = []
+
+    return components
 
 
 @not_implemented_for('directed')
@@ -236,7 +270,8 @@ def biconnected_components(G):
            Communications of the ACM 16: 372–378. doi:10.1145/362248.362272
 
     """
-    pass
+    for comp in biconnected_component_edges(G):
+        yield set(chain.from_iterable(comp))
 
 
 @not_implemented_for('directed')
@@ -307,4 +342,37 @@ def articulation_points(G):
            Communications of the ACM 16: 372–378. doi:10.1145/362248.362272
 
     """
-    pass
+    visited = set()
+    low = {}
+    discovery_time = {}
+    parent = {}
+    ap = set()
+    time = 0
+
+    def dfs(node):
+        nonlocal time
+        children = 0
+        visited.add(node)
+        discovery_time[node] = time
+        low[node] = time
+        time += 1
+
+        for neighbor in G[node]:
+            if neighbor not in visited:
+                parent[neighbor] = node
+                children += 1
+                dfs(neighbor)
+                low[node] = min(low[node], low[neighbor])
+                if parent[node] is None and children > 1:
+                    ap.add(node)
+                if parent[node] is not None and low[neighbor] >= discovery_time[node]:
+                    ap.add(node)
+            elif neighbor != parent[node]:
+                low[node] = min(low[node], discovery_time[neighbor])
+
+    for node in G:
+        if node not in visited:
+            parent[node] = None
+            dfs(node)
+
+    return ap
