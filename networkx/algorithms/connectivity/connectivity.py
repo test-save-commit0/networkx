@@ -163,7 +163,32 @@ def local_node_connectivity(G, s, t, flow_func=None, auxiliary=None,
         http://www.informatik.uni-augsburg.de/thi/personen/kammer/Graph_Connectivity.pdf
 
     """
-    pass
+    if auxiliary is None:
+        H = build_auxiliary_node_connectivity(G)
+    else:
+        H = auxiliary
+
+    # The source and target nodes in the auxiliary digraph are the ones
+    # with the original node names. Adding the suffix _A or _B to the node
+    # name is only necessary for internal nodes.
+    mapping = H.graph['mapping']
+    s = mapping[s]
+    t = mapping[t]
+
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    if residual is None:
+        R = build_residual_network(H, 'capacity')
+    else:
+        R = residual
+
+    kwargs = dict(capacity='capacity', residual=R, cutoff=cutoff)
+
+    # Compute maximum flow between s and t in the auxiliary digraph
+    flow_value = flow_func(H, s, t, **kwargs)
+
+    return int(flow_value)
 
 
 @nx._dispatchable
@@ -257,7 +282,50 @@ def node_connectivity(G, s=None, t=None, flow_func=None):
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if (s is not None and t is None) or (s is None and t is not None):
+        raise nx.NetworkXError('Both source and target must be specified.')
+
+    # Local node connectivity
+    if s is not None and t is not None:
+        if s not in G:
+            raise nx.NetworkXError(f'node {s} not in graph')
+        if t not in G:
+            raise nx.NetworkXError(f'node {t} not in graph')
+        return local_node_connectivity(G, s, t, flow_func=flow_func)
+
+    # Global node connectivity
+    if G.is_directed():
+        if not nx.is_weakly_connected(G):
+            return 0
+        iter_func = itertools.permutations
+        kwds = {'flow_func': flow_func}
+    else:
+        if not nx.is_connected(G):
+            return 0
+        iter_func = itertools.combinations
+        kwds = {'flow_func': flow_func}
+
+    n = G.number_of_nodes()
+    if n < 3:
+        return min(G.degree())
+
+    # Reuse the auxiliary digraph and the residual network
+    H = build_auxiliary_node_connectivity(G)
+    R = build_residual_network(H, 'capacity')
+    kwargs = dict(flow_func=flow_func, residual=R, auxiliary=H)
+
+    # Pick a node with minimum degree
+    v = min(G, key=G.degree)
+    # Node connectivity is bounded by degree.
+    K = G.degree(v)
+    # compute local node connectivity with all other non-adjacent nodes
+    for w in set(G) - set(G[v]) - {v}:
+        kwargs['cutoff'] = K
+        k = local_node_connectivity(G, v, w, **kwargs)
+        K = min(K, k)
+        if K == 1:
+            break
+    return K
 
 
 @nx._dispatchable
@@ -309,7 +377,24 @@ def average_node_connectivity(G, flow_func=None):
             http://www.sciencedirect.com/science/article/pii/S0012365X01001807
 
     """
-    pass
+    n = G.number_of_nodes()
+    if n < 2:
+        raise nx.NetworkXError("Graph has less than two nodes.")
+
+    aux_digraph = build_auxiliary_node_connectivity(G)
+    # Reuse auxiliary digraph and residual network
+    R = build_residual_network(aux_digraph, 'capacity')
+
+    num_pairs = n * (n - 1) / 2
+
+    # Compute local node connectivity for each pair of nodes
+    total_connectivity = 0
+    for u, v in itertools.combinations(G, 2):
+        total_connectivity += local_node_connectivity(G, u, v, flow_func=flow_func,
+                                                      auxiliary=aux_digraph,
+                                                      residual=R)
+
+    return total_connectivity / num_pairs
 
 
 @nx._dispatchable
@@ -352,7 +437,22 @@ def all_pairs_node_connectivity(G, nbunch=None, flow_func=None):
     :meth:`shortest_augmenting_path`
 
     """
-    pass
+    if nbunch is None:
+        nbunch = G
+
+    aux_digraph = build_auxiliary_node_connectivity(G)
+    R = build_residual_network(aux_digraph, 'capacity')
+
+    all_pairs = {n: {} for n in nbunch}
+
+    for u, v in itertools.combinations(nbunch, 2):
+        K = local_node_connectivity(G, u, v, flow_func=flow_func,
+                                    auxiliary=aux_digraph,
+                                    residual=R)
+        all_pairs[u][v] = K
+        all_pairs[v][u] = K
+
+    return all_pairs
 
 
 @nx._dispatchable(graphs={'G': 0, 'auxiliary?': 4})
@@ -494,7 +594,25 @@ def local_edge_connectivity(G, s, t, flow_func=None, auxiliary=None,
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if auxiliary is None:
+        H = build_auxiliary_edge_connectivity(G)
+    else:
+        H = auxiliary
+
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    if residual is None:
+        R = build_residual_network(H, 'capacity')
+    else:
+        R = residual
+
+    kwargs = dict(capacity='capacity', residual=R, cutoff=cutoff)
+
+    # Compute maximum flow between s and t in the auxiliary digraph
+    flow_value = flow_func(H, s, t, **kwargs)
+
+    return int(flow_value)
 
 
 @nx._dispatchable
@@ -598,4 +716,71 @@ def edge_connectivity(G, s=None, t=None, flow_func=None, cutoff=None):
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
     """
-    pass
+    if (s is not None and t is None) or (s is None and t is not None):
+        raise nx.NetworkXError('Both source and target must be specified.')
+
+    # Local edge connectivity
+    if s is not None and t is not None:
+        if s not in G:
+            raise nx.NetworkXError(f'node {s} not in graph')
+        if t not in G:
+            raise nx.NetworkXError(f'node {t} not in graph')
+        return local_edge_connectivity(G, s, t, flow_func=flow_func, cutoff=cutoff)
+
+    # Global edge connectivity
+    if G.is_directed():
+        if not nx.is_weakly_connected(G):
+            return 0
+        # Algorithm 8 in [1]
+        if flow_func is None:
+            flow_func = default_flow_func
+
+        kwargs = dict(flow_func=flow_func, cutoff=cutoff)
+
+        # Initial value for edge connectivity
+        K = float('inf')
+        nodes = list(G)
+        n = len(nodes)
+
+        # compute local edge connectivity between an arbitrary node
+        # and the rest of nodes in the graph
+        for i in range(1, n):
+            K = min(K, local_edge_connectivity(G, nodes[0], nodes[i], **kwargs))
+            if K == 1:
+                return K
+
+        return K
+
+    else:  # undirected
+        if not nx.is_connected(G):
+            return 0
+
+        # Algorithm 6 in [1]
+        if flow_func is None:
+            flow_func = default_flow_func
+
+        kwargs = dict(flow_func=flow_func, cutoff=cutoff)
+
+        # Initial value for edge connectivity
+        K = float('inf')
+
+        # Find a small dominating set for G
+        D = nx.dominating_set(G)
+
+        # compute local edge connectivity between v and the rest of
+        # nodes in the dominating set
+        for v in D:
+            for w in D:
+                if v != w:
+                    K = min(K, local_edge_connectivity(G, v, w, **kwargs))
+                    if K == 1:
+                        return K
+        # compute local edge connectivity between v and any node in G
+        # not in the dominating set
+        for v in D:
+            for w in set(G) - set(D):
+                K = min(K, local_edge_connectivity(G, v, w, **kwargs))
+                if K == 1:
+                    return K
+
+        return K
