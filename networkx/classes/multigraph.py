@@ -950,7 +950,13 @@ class MultiGraph(Graph):
         >>> G.get_edge_data(1, 0, 0)  # specific key gives back
         {'weight': 5}
         """
-        pass
+        try:
+            if key is None:
+                return self._adj[u][v]
+            else:
+                return self._adj[u][v][key]
+        except KeyError:
+            return default
 
     @cached_property
     def degree(self):
