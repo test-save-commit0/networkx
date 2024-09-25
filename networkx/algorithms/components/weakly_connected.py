@@ -50,7 +50,12 @@ def weakly_connected_components(G):
     For directed graphs only.
 
     """
-    pass
+    seen = set()
+    for v in G:
+        if v not in seen:
+            c = set(_plain_bfs(G, v))
+            yield c
+            seen.update(c)
 
 
 @not_implemented_for('undirected')
@@ -90,7 +95,7 @@ def number_weakly_connected_components(G):
     For directed graphs only.
 
     """
-    pass
+    return sum(1 for _ in weakly_connected_components(G))
 
 
 @not_implemented_for('undirected')
@@ -143,7 +148,9 @@ def is_weakly_connected(G):
     For directed graphs only.
 
     """
-    pass
+    if len(G) == 0:
+        return True
+    return len(list(_plain_bfs(G, next(iter(G))))) == len(G)
 
 
 def _plain_bfs(G, source):
@@ -154,4 +161,14 @@ def _plain_bfs(G, source):
     For directed graphs only.
 
     """
-    pass
+    seen = set()
+    nextlevel = {source}
+    while nextlevel:
+        thislevel = nextlevel
+        nextlevel = set()
+        for v in thislevel:
+            if v not in seen:
+                yield v
+                seen.add(v)
+                nextlevel.update(G.predecessors(v))
+                nextlevel.update(G.successors(v))
