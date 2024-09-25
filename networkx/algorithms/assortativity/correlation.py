@@ -68,7 +68,8 @@ def degree_assortativity_coefficient(G, x='out', y='in', weight=None, nodes
     .. [2] Foster, J.G., Foster, D.V., Grassberger, P. & Paczuski, M.
        Edge direction and the structure of networks, PNAS 107, 10815-20 (2010).
     """
-    pass
+    M = degree_mixing_matrix(G, x=x, y=y, weight=weight, nodes=nodes)
+    return attribute_ac(M)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -124,7 +125,10 @@ def degree_pearson_correlation_coefficient(G, x='out', y='in', weight=None,
     .. [2] Foster, J.G., Foster, D.V., Grassberger, P. & Paczuski, M.
        Edge direction and the structure of networks, PNAS 107, 10815-20 (2010).
     """
-    pass
+    import scipy.stats as stats
+    xy = node_degree_xy(G, x=x, y=y, weight=weight, nodes=nodes)
+    x, y = zip(*xy)
+    return stats.pearsonr(x, y)[0]
 
 
 @nx._dispatchable(node_attrs='attribute')
@@ -170,7 +174,8 @@ def attribute_assortativity_coefficient(G, attribute, nodes=None):
     .. [1] M. E. J. Newman, Mixing patterns in networks,
        Physical Review E, 67 026126, 2003
     """
-    pass
+    M = attribute_mixing_matrix(G, attribute, nodes)
+    return attribute_ac(M)
 
 
 @nx._dispatchable(node_attrs='attribute')
@@ -215,7 +220,12 @@ def numeric_assortativity_coefficient(G, attribute, nodes=None):
     .. [1] M. E. J. Newman, Mixing patterns in networks
            Physical Review E, 67 026126, 2003
     """
-    pass
+    import numpy as np
+    xy = [[G.nodes[u][attribute], G.nodes[v][attribute]] for u, v in G.edges() if attribute in G.nodes[u] and attribute in G.nodes[v]]
+    if not xy:
+        raise nx.NetworkXError("No edges with attribute {}.".format(attribute))
+    x, y = zip(*xy)
+    return np.corrcoef(x, y)[0][1]
 
 
 def attribute_ac(M):
@@ -237,4 +247,10 @@ def attribute_ac(M):
     .. [1] M. E. J. Newman, Mixing patterns in networks,
        Physical Review E, 67 026126, 2003
     """
-    pass
+    import numpy as np
+    if M.sum() != 1.0:
+        M = M / M.sum()
+    s = (M @ M).sum()
+    t = M.trace()
+    r = (t - s) / (1 - s)
+    return r
