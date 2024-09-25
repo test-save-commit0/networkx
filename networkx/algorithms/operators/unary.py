@@ -31,7 +31,18 @@ def complement(G):
     EdgeView([(1, 4), (1, 5), (2, 4), (2, 5), (4, 5)])
 
     """
-    pass
+    if G.is_directed():
+        GC = G.__class__()
+    else:
+        GC = G.__class__()
+    GC.add_nodes_from(G.nodes())
+    
+    for u in G:
+        for v in G:
+            if u != v and not G.has_edge(u, v):
+                GC.add_edge(u, v)
+    
+    return GC
 
 
 @nx._dispatchable(returns_graph=True)
@@ -64,4 +75,15 @@ def reverse(G, copy=True):
     OutEdgeView([(2, 1), (3, 1), (3, 2), (4, 3), (5, 3)])
 
     """
-    pass
+    if not G.is_directed():
+        raise nx.NetworkXError("Cannot reverse an undirected graph.")
+    
+    if copy:
+        H = G.__class__()
+        H.add_nodes_from(G.nodes(data=True))
+        H.add_edges_from((v, u, d) for (u, v, d) in G.edges(data=True))
+        H.graph.update(G.graph)
+        return H
+    else:
+        G.reverse(copy=False)
+        return G
