@@ -57,7 +57,37 @@ def fast_label_propagation_communities(G, *, weight=None, seed=None):
        fast label propagation." Scientific Reports 13 (2023): 2701.
        https://doi.org/10.1038/s41598-023-29610-z
     """
-    pass
+    import random
+    
+    if seed is not None:
+        random.seed(seed)
+    
+    nodes = list(G.nodes())
+    random.shuffle(nodes)
+    labels = {node: i for i, node in enumerate(nodes)}
+    queue = deque(nodes)
+    
+    while queue:
+        node = queue.popleft()
+        label_counts = _fast_label_count(G, labels, node, weight)
+        if not label_counts:
+            continue
+        
+        max_count = max(label_counts.values())
+        best_labels = [label for label, count in label_counts.items() if count == max_count]
+        new_label = random.choice(best_labels)
+        
+        if new_label != labels[node]:
+            labels[node] = new_label
+            for neighbor in G.neighbors(node):
+                if labels[neighbor] != new_label and neighbor not in queue:
+                    queue.append(neighbor)
+    
+    communities = defaultdict(set)
+    for node, label in labels.items():
+        communities[label].add(node)
+    
+    return communities.values()
 
 
 def _fast_label_count(G, comms, node, weight=None):
@@ -65,7 +95,11 @@ def _fast_label_count(G, comms, node, weight=None):
 
     Returns a dictionary keyed by label to the frequency of that label.
     """
-    pass
+    label_count = defaultdict(float)
+    for neighbor in G.neighbors(node):
+        w = G[node][neighbor].get(weight, 1) if weight else 1
+        label_count[comms[neighbor]] += w
+    return label_count
 
 
 @py_random_state(2)
@@ -119,7 +153,39 @@ def asyn_lpa_communities(G, weight=None, seed=None):
            linear time algorithm to detect community structures in large-scale
            networks." Physical Review E 76.3 (2007): 036106.
     """
-    pass
+    import random
+    
+    if seed is not None:
+        random.seed(seed)
+    
+    labels = {n: i for i, n in enumerate(G.nodes())}
+    
+    def most_frequent_label(node, label_dict):
+        if not G[node]:
+            return label_dict[node]
+        label_count = defaultdict(float)
+        for neighbor in G[node]:
+            w = G[node][neighbor].get(weight, 1) if weight else 1
+            label_count[label_dict[neighbor]] += w
+        return max(label_count, key=label_count.get)
+    
+    nodes = list(G.nodes())
+    while True:
+        random.shuffle(nodes)
+        stop = True
+        for node in nodes:
+            new_label = most_frequent_label(node, labels)
+            if labels[node] != new_label:
+                labels[node] = new_label
+                stop = False
+        if stop:
+            break
+    
+    communities = defaultdict(set)
+    for node, label in labels.items():
+        communities[label].add(node)
+    
+    return communities.values()
 
 
 @not_implemented_for('directed')
@@ -153,7 +219,19 @@ def label_propagation_communities(G):
        Applications of Social Network Analysis (BASNA), 2010 IEEE International
        Workshop on (pp. 1-8). IEEE.
     """
-    pass
+    coloring = _color_network(G)
+    labeling = {n: i for i, n in enumerate(G.nodes())}
+
+    while not _labeling_complete(labeling, G):
+        for color, nodes in coloring.items():
+            for n in nodes:
+                _update_label(n, labeling, G)
+
+    communities = defaultdict(set)
+    for n, label in labeling.items():
+        communities[label].add(n)
+
+    return communities.values()
 
 
 def _color_network(G):
@@ -161,7 +239,18 @@ def _color_network(G):
 
     Returns a dict keyed by color to a set of nodes with that color.
     """
-    pass
+    coloring = {}
+    colors = {}
+    for node in G:
+        # Find the set of colors of neighbors
+        neighbor_colors = {colors[neigh] for neigh in G[node] if neigh in colors}
+        # Find the first unused color
+        color = next(c for c in range(len(G)) if c not in neighbor_colors)
+        colors[node] = color
+        if color not in coloring:
+            coloring[color] = set()
+        coloring[color].add(node)
+    return coloring
 
 
 def _labeling_complete(labeling, G):
@@ -172,7 +261,7 @@ def _labeling_complete(labeling, G):
 
     Nodes with no neighbors are considered complete.
     """
-    pass
+    return all(_most_frequent_labels(n, labeling, G) == {labeling[n]} for n in G)
 
 
 def _most_frequent_labels(node, labeling, G):
@@ -180,7 +269,13 @@ def _most_frequent_labels(node, labeling, G):
 
     Input `labeling` should be a dict keyed by node to labels.
     """
-    pass
+    if not G[node]:
+        # Nodes with no neighbors are considered complete
+        return {labeling[node]}
+
+    label_freq = Counter(labeling[v] for v in G[node])
+    max_freq = max(label_freq.values())
+    return {label for label, freq in label_freq.items() if freq == max_freq}
 
 
 def _update_label(node, labeling, G):
@@ -189,4 +284,7 @@ def _update_label(node, labeling, G):
     The algorithm is explained in: 'Community Detection via Semi-Synchronous
     Label Propagation Algorithms' Cordasco and Gargano, 2011
     """
-    pass
+    high_labels = _most_frequent_labels(node, labeling, G)
+    if labeling[node] in high_labels:
+        return
+    labeling[node] = max(high_labels)
