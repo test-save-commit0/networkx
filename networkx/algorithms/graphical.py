@@ -56,7 +56,12 @@ def is_graphical(sequence, method='eg'):
     .. [CL1996] G. Chartrand and L. Lesniak, "Graphs and Digraphs",
        Chapman and Hall/CRC, 1996.
     """
-    pass
+    if method == 'eg':
+        return is_valid_degree_sequence_erdos_gallai(sequence)
+    elif method == 'hh':
+        return is_valid_degree_sequence_havel_hakimi(sequence)
+    else:
+        raise ValueError("method must be 'eg' or 'hh'")
 
 
 @nx._dispatchable(graphs=None)
@@ -111,7 +116,23 @@ def is_valid_degree_sequence_havel_hakimi(deg_sequence):
     .. [CL1996] G. Chartrand and L. Lesniak, "Graphs and Digraphs",
        Chapman and Hall/CRC, 1996.
     """
-    pass
+    deg_sequence = list(deg_sequence)  # Convert to list if it's not already
+    if not all(d >= 0 and isinstance(d, int) for d in deg_sequence):
+        return False
+    if sum(deg_sequence) % 2:
+        return False
+    while deg_sequence:
+        deg_sequence.sort(reverse=True)
+        if deg_sequence[0] == 0:
+            return True
+        d = deg_sequence.pop(0)
+        if d > len(deg_sequence):
+            return False
+        for i in range(d):
+            deg_sequence[i] -= 1
+            if deg_sequence[i] < 0:
+                return False
+    return True
 
 
 @nx._dispatchable(graphs=None)
@@ -178,7 +199,20 @@ def is_valid_degree_sequence_erdos_gallai(deg_sequence):
        of graphic sequences", Discrete Mathematics, 105, pp. 292-303 (1992).
     .. [EG1960] Erdős and Gallai, Mat. Lapok 11 264, 1960.
     """
-    pass
+    deg_sequence = list(deg_sequence)
+    if not all(d >= 0 and isinstance(d, int) for d in deg_sequence):
+        return False
+    if sum(deg_sequence) % 2:
+        return False
+    n = len(deg_sequence)
+    deg_sequence.sort(reverse=True)
+    k = 0
+    s = 0
+    for k in range(1, n + 1):
+        s += deg_sequence[k - 1]
+        if s > k * (k - 1) + sum(min(x, k) for x in deg_sequence[k:]):
+            return False
+    return True
 
 
 @nx._dispatchable(graphs=None)
@@ -218,7 +252,12 @@ def is_multigraphical(sequence):
        degrees of the vertices of a linear graph", J. SIAM, 10, pp. 496-506
        (1962).
     """
-    pass
+    sequence = list(sequence)
+    if not all(d >= 0 and isinstance(d, int) for d in sequence):
+        return False
+    if sum(sequence) % 2:
+        return False
+    return max(sequence) <= sum(sequence) - max(sequence)
 
 
 @nx._dispatchable(graphs=None)
@@ -261,7 +300,7 @@ def is_pseudographical(sequence):
        and their degree lists", IEEE Trans. Circuits and Systems, CAS-23(12),
        pp. 778-782 (1976).
     """
-    pass
+    return all(d >= 0 and isinstance(d, int) for d in sequence) and sum(sequence) % 2 == 0
 
 
 @nx._dispatchable(graphs=None)
@@ -308,4 +347,29 @@ def is_digraphical(in_sequence, out_sequence):
        Algorithms for Constructing Graphs and Digraphs with Given Valences
        and Factors, Discrete Mathematics, 6(1), pp. 79-88 (1973)
     """
-    pass
+    in_sequence, out_sequence = list(in_sequence), list(out_sequence)
+    if len(in_sequence) != len(out_sequence):
+        return False
+    if sum(in_sequence) != sum(out_sequence):
+        return False
+    if not all(ix >= 0 and ox >= 0 and isinstance(ix, int) and isinstance(ox, int)
+               for ix, ox in zip(in_sequence, out_sequence)):
+        return False
+
+    n = len(in_sequence)
+    if n == 0:
+        return True
+
+    in_sequence_sorted = sorted(in_sequence, reverse=True)
+    out_sequence_sorted = sorted(out_sequence, reverse=True)
+    out_degree_count = [0] * (n + 1)
+    for d in out_sequence:
+        out_degree_count[d] += 1
+
+    for k in range(1, n + 1):
+        sum_in = sum(in_sequence_sorted[:k])
+        sum_out = sum(min(x, k) for x in out_sequence_sorted)
+        if sum_in > k * (k - 1) + sum_out:
+            return False
+
+    return True
