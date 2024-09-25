@@ -35,5 +35,33 @@ def stochastic_graph(G, copy=True, weight='weight'):
         for an edge, then the edge weight is assumed to be 1. If an edge
         has a weight, it must be a positive number.
 
+    Returns
+    -------
+    H : DiGraph or MultiDiGraph
+        The stochastic graph.
+
+    Raises
+    ------
+    NetworkXError
+        If the graph is not directed or if a negative weight is encountered.
+
     """
-    pass
+    if copy:
+        H = G.copy()
+    else:
+        H = G
+
+    for n in H:
+        out_edges = H.out_edges(n, data=True)
+        total_weight = sum(edata.get(weight, 1) for _, _, edata in out_edges)
+        
+        if total_weight == 0:
+            continue
+        
+        for _, v, edata in out_edges:
+            w = edata.get(weight, 1)
+            if w < 0:
+                raise nx.NetworkXError(f"Negative weight encountered on edge ({n}, {v})")
+            edata[weight] = w / total_weight
+
+    return H
