@@ -64,7 +64,27 @@ def bridges(G, root=None):
     ----------
     .. [1] https://en.wikipedia.org/wiki/Bridge_%28graph_theory%29#Bridge-Finding_with_Chain_Decompositions
     """
-    pass
+    if root is not None and root not in G:
+        raise nx.NodeNotFound(f"Node {root} is not in the graph.")
+
+    # Convert multigraph to simple graph
+    if G.is_multigraph():
+        H = nx.Graph(G)
+    else:
+        H = G
+
+    # If root is specified, only consider its connected component
+    if root is not None:
+        H = H.subgraph(nx.node_connected_component(H, root))
+
+    # Find bridges using chain decomposition
+    bridges_set = set(H.edges()) - set(chain.from_iterable(nx.chain_decomposition(H)))
+
+    # If original graph was a multigraph, verify bridges
+    if G.is_multigraph():
+        bridges_set = {(u, v) for u, v in bridges_set if G.number_of_edges(u, v) == 1}
+
+    yield from bridges_set
 
 
 @not_implemented_for('directed')
@@ -119,7 +139,11 @@ def has_bridges(G, root=None):
     graph and $m$ is the number of edges.
 
     """
-    pass
+    try:
+        next(bridges(G, root))
+        return True
+    except StopIteration:
+        return False
 
 
 @not_implemented_for('multigraph')
@@ -165,4 +189,16 @@ def local_bridges(G, with_span=True, weight=None):
        >>> (0, 8, 8) in set(nx.local_bridges(G))
        True
     """
-    pass
+    for u, v in G.edges():
+        if not set(G[u]) & set(G[v]):  # No common neighbors
+            if with_span:
+                # Remove the edge and calculate the shortest path
+                G.remove_edge(u, v)
+                try:
+                    span = nx.shortest_path_length(G, u, v, weight=weight)
+                except nx.NetworkXNoPath:
+                    span = float('inf')
+                G.add_edge(u, v)
+                yield u, v, span
+            else:
+                yield u, v
