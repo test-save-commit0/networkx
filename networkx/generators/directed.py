@@ -54,7 +54,27 @@ def gn_graph(n, kernel=None, create_using=None, seed=None):
            Organization of Growing Random Networks,
            Phys. Rev. E, 63, 066123, 2001.
     """
-    pass
+    if create_using is None:
+        create_using = nx.DiGraph
+    G = create_using() if isinstance(create_using, type) else create_using
+    G.clear()
+
+    if kernel is None:
+        kernel = lambda x: x
+
+    if n == 0:
+        return G
+
+    G.add_node(0)
+    if n == 1:
+        return G
+
+    for source in range(1, n):
+        # Choose target node based on kernel
+        target = seed.choices(range(source), weights=[kernel(G.out_degree(i)) for i in range(source)])[0]
+        G.add_edge(source, target)
+
+    return G
 
 
 @py_random_state(3)
@@ -96,7 +116,25 @@ def gnr_graph(n, p, create_using=None, seed=None):
            Organization of Growing Random Networks,
            Phys. Rev. E, 63, 066123, 2001.
     """
-    pass
+    if create_using is None:
+        create_using = nx.DiGraph
+    G = create_using() if isinstance(create_using, type) else create_using
+    G.clear()
+
+    if n == 0:
+        return G
+
+    G.add_node(0)
+    if n == 1:
+        return G
+
+    for source in range(1, n):
+        target = seed.randint(0, source - 1)
+        if seed.random() < p and target != 0:
+            target = next(G.successors(target))
+        G.add_edge(source, target)
+
+    return G
 
 
 @py_random_state(2)
@@ -124,7 +162,25 @@ def gnc_graph(n, create_using=None, seed=None):
            Network Growth by Copying,
            Phys. Rev. E, 71, 036118, 2005k.},
     """
-    pass
+    if create_using is None:
+        create_using = nx.DiGraph
+    G = create_using() if isinstance(create_using, type) else create_using
+    G.clear()
+
+    if n == 0:
+        return G
+
+    G.add_node(0)
+    if n == 1:
+        return G
+
+    for source in range(1, n):
+        target = seed.randint(0, source - 1)
+        G.add_edge(source, target)
+        for successor in G.successors(target):
+            G.add_edge(source, successor)
+
+    return G
 
 
 @py_random_state(6)
@@ -180,7 +236,48 @@ def scale_free_graph(n, alpha=0.41, beta=0.54, gamma=0.05, delta_in=0.2,
            Proceedings of the fourteenth annual ACM-SIAM Symposium on
            Discrete Algorithms, 132--139, 2003.
     """
-    pass
+    def _choose_node(G, distribution, delta):
+        if len(distribution) == 0:
+            return seed.choice(list(G))
+        cmsum = Counter(distribution)
+        for k in cmsum:
+            cmsum[k] = cmsum[k] + delta
+        return seed.choices(list(cmsum.keys()), weights=list(cmsum.values()))[0]
+
+    if alpha + beta + gamma != 1:
+        raise ValueError("alpha + beta + gamma must equal 1")
+    
+    if initial_graph is None:
+        G = nx.MultiDiGraph()
+        G.add_node(0)
+    else:
+        G = initial_graph.copy()
+    
+    in_degree = dict(G.in_degree())
+    out_degree = dict(G.out_degree())
+
+    while len(G) < n:
+        r = seed.random()
+        if r < alpha:  # Add new node with edge to existing node (in-degree)
+            v = len(G)
+            w = _choose_node(G, in_degree, delta_in)
+            G.add_edge(v, w)
+            in_degree[w] = in_degree.get(w, 0) + 1
+            out_degree[v] = out_degree.get(v, 0) + 1
+        elif r < alpha + beta:  # Add edge between existing nodes
+            v = _choose_node(G, out_degree, delta_out)
+            w = _choose_node(G, in_degree, delta_in)
+            G.add_edge(v, w)
+            in_degree[w] = in_degree.get(w, 0) + 1
+            out_degree[v] = out_degree.get(v, 0) + 1
+        else:  # Add new node with edge from existing node (out-degree)
+            v = len(G)
+            w = _choose_node(G, out_degree, delta_out)
+            G.add_edge(w, v)
+            in_degree[v] = in_degree.get(v, 0) + 1
+            out_degree[w] = out_degree.get(w, 0) + 1
+    
+    return G
 
 
 @py_random_state(4)
@@ -242,7 +339,26 @@ def random_uniform_k_out_graph(n, k, self_loops=True, with_replacement=True,
     set to positive infinity.
 
     """
-    pass
+    if with_replacement:
+        create_using = nx.MultiDiGraph()
+    else:
+        create_using = nx.DiGraph()
+        if not self_loops and k >= n:
+            raise ValueError("k must be less than n when not using replacement and self-loops are not allowed")
+
+    G = nx.empty_graph(n, create_using)
+
+    for source in range(n):
+        possible_targets = list(range(n)) if self_loops else [target for target in range(n) if target != source]
+        if with_replacement:
+            targets = seed.choices(possible_targets, k=k)
+        else:
+            targets = seed.sample(possible_targets, k=min(k, len(possible_targets)))
+        
+        for target in targets:
+            G.add_edge(source, target)
+
+    return G
 
 
 @py_random_state(4)
@@ -314,4 +430,25 @@ def random_k_out_graph(n, k, alpha, self_loops=True, seed=None):
          <https://arxiv.org/abs/1311.5961>
 
     """
-    pass
+    if alpha <= 0:
+        raise ValueError("alpha must be positive")
+
+    G = nx.MultiDiGraph()
+    G.add_nodes_from(range(n))
+    
+    weights = {node: alpha for node in G.nodes()}
+    
+    while G.size() < n * k:
+        u = seed.choice([node for node in G.nodes() if G.out_degree(node) < k])
+        
+        if not self_loops:
+            possible_targets = [v for v in G.nodes() if v != u]
+        else:
+            possible_targets = list(G.nodes())
+        
+        v = seed.choices(possible_targets, weights=[weights[node] for node in possible_targets])[0]
+        
+        G.add_edge(u, v)
+        weights[v] += 1
+
+    return G
