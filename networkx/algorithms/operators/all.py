@@ -65,7 +65,32 @@ def union_all(graphs, rename=()):
     union
     disjoint_union_all
     """
-    pass
+    if not graphs:
+        raise ValueError("Cannot take union of an empty list of graphs.")
+    
+    graphs = list(graphs)
+    U = graphs[0].__class__()
+    
+    if rename:
+        rename = chain(rename, repeat(""))
+    
+    for i, G in enumerate(graphs):
+        if not G.is_directed() == U.is_directed():
+            raise nx.NetworkXError("All graphs must be of the same type.")
+        
+        prefix = next(rename) if rename else ""
+        G = nx.relabel_nodes(G, lambda x: f"{prefix}{x}")
+        
+        if set(U) & set(G):
+            raise nx.NetworkXError("Graphs are not disjoint. Use compose_all() instead.")
+        
+        U.add_nodes_from(G.nodes(data=True))
+        U.add_edges_from(G.edges(data=True))
+        
+        # Update graph attributes
+        U.graph.update(G.graph)
+    
+    return U
 
 
 @nx._dispatchable(graphs='[graphs]', preserve_all_attrs=True, returns_graph
@@ -111,7 +136,28 @@ def disjoint_union_all(graphs):
     If a graph attribute is present in multiple graphs, then the value
     from the last graph in the list with that attribute is used.
     """
-    pass
+    if not graphs:
+        raise ValueError("Cannot take disjoint union of an empty list of graphs.")
+    
+    graphs = list(graphs)
+    U = graphs[0].__class__()
+    node_count = 0
+    
+    for G in graphs:
+        if not G.is_directed() == U.is_directed():
+            raise nx.NetworkXError("All graphs must be of the same type.")
+        
+        # Relabel nodes to ensure disjointness
+        H = nx.convert_node_labels_to_integers(G, first_label=node_count)
+        node_count += len(H)
+        
+        U.add_nodes_from(H.nodes(data=True))
+        U.add_edges_from(H.edges(data=True))
+        
+        # Update graph attributes
+        U.graph.update(G.graph)
+    
+    return U
 
 
 @nx._dispatchable(graphs='[graphs]', preserve_all_attrs=True, returns_graph
@@ -157,7 +203,23 @@ def compose_all(graphs):
     If a graph attribute is present in multiple graphs, then the value
     from the last graph in the list with that attribute is used.
     """
-    pass
+    if not graphs:
+        raise ValueError("Cannot compose an empty list of graphs.")
+    
+    graphs = list(graphs)
+    C = graphs[0].__class__()
+    
+    for G in graphs:
+        if not G.is_directed() == C.is_directed():
+            raise nx.NetworkXError("All graphs must be of the same type.")
+        
+        C.add_nodes_from(G.nodes(data=True))
+        C.add_edges_from(G.edges(data=True))
+        
+        # Update graph attributes
+        C.graph.update(G.graph)
+    
+    return C
 
 
 @nx._dispatchable(graphs='[graphs]', returns_graph=True)
@@ -219,4 +281,26 @@ def intersection_all(graphs):
     [(2, 3)]
 
     """
-    pass
+    if not graphs:
+        raise ValueError("Cannot take intersection of an empty list of graphs.")
+    
+    graphs = list(graphs)
+    R = graphs[0].__class__()
+    
+    if len(graphs) == 1:
+        return graphs[0].copy()
+    
+    # Find common nodes
+    common_nodes = set.intersection(*[set(G) for G in graphs])
+    R.add_nodes_from(common_nodes)
+    
+    if len(common_nodes) == 0:
+        return R
+    
+    # Find common edges
+    for u, v in graphs[0].edges():
+        if u in common_nodes and v in common_nodes:
+            if all(G.has_edge(u, v) for G in graphs[1:]):
+                R.add_edge(u, v)
+    
+    return R
