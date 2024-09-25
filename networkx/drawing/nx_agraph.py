@@ -56,7 +56,29 @@ def from_agraph(A, create_using=None):
     attribute or the value 1 if no edge weight attribute is found.
 
     """
-    pass
+    if create_using is None:
+        if A.is_directed():
+            create_using = nx.DiGraph
+        else:
+            create_using = nx.Graph
+
+    G = nx.empty_graph(0, create_using)
+    G.name = A.name
+
+    # Add nodes
+    for n in A.nodes():
+        G.add_node(n.name, **dict(n.attr))
+
+    # Add edges
+    for e in A.edges():
+        u, v = e
+        attr = dict(e.attr)
+        G.add_edge(u.name, v.name, **attr)
+
+    # Add graph attributes
+    G.graph.update(A.graph_attr)
+
+    return G
 
 
 def to_agraph(N):
@@ -79,7 +101,32 @@ def to_agraph(N):
     and then updated with the calling arguments if any.
 
     """
-    pass
+    import pygraphviz
+
+    directed = N.is_directed()
+    strict = nx.number_of_selfloops(N) == 0 and not N.is_multigraph()
+    A = pygraphviz.AGraph(strict=strict, directed=directed)
+
+    # Add nodes
+    for n, nodedata in N.nodes(data=True):
+        A.add_node(n, **nodedata)
+
+    # Add edges
+    if N.is_multigraph():
+        for u, v, key, edgedata in N.edges(data=True, keys=True):
+            str_edgedata = {k: str(v) for k, v in edgedata.items()}
+            A.add_edge(u, v, key=str(key), **str_edgedata)
+    else:
+        for u, v, edgedata in N.edges(data=True):
+            str_edgedata = {k: str(v) for k, v in edgedata.items()}
+            A.add_edge(u, v, **str_edgedata)
+
+    # Add graph attributes
+    A.graph_attr.update(N.graph.get("graph", {}))
+    A.node_attr.update(N.graph.get("node", {}))
+    A.edge_attr.update(N.graph.get("edge", {}))
+
+    return A
 
 
 def write_dot(G, path):
@@ -98,7 +145,8 @@ def write_dot(G, path):
     Note that some graphviz layouts are not guaranteed to be deterministic,
     see https://gitlab.com/graphviz/graphviz/-/issues/1767 for more info.
     """
-    pass
+    A = to_agraph(G)
+    A.write(path)
 
 
 @nx._dispatchable(name='agraph_read_dot', graphs=None, returns_graph=True)
@@ -110,7 +158,9 @@ def read_dot(path):
     path : file or string
        File name or file handle to read.
     """
-    pass
+    import pygraphviz
+    A = pygraphviz.AGraph(file=path)
+    return from_agraph(A)
 
 
 def graphviz_layout(G, prog='neato', root=None, args=''):
@@ -144,7 +194,7 @@ def graphviz_layout(G, prog='neato', root=None, args=''):
     Note that some graphviz layouts are not guaranteed to be deterministic,
     see https://gitlab.com/graphviz/graphviz/-/issues/1767 for more info.
     """
-    pass
+    return pygraphviz_layout(G, prog=prog, root=root, args=args)
 
 
 def pygraphviz_layout(G, prog='neato', root=None, args=''):
@@ -187,12 +237,25 @@ def pygraphviz_layout(G, prog='neato', root=None, args=''):
     Note that some graphviz layouts are not guaranteed to be deterministic,
     see https://gitlab.com/graphviz/graphviz/-/issues/1767 for more info.
     """
-    pass
+    import pygraphviz
+
+    A = to_agraph(G)
+    A.layout(prog=prog, args=args)
+
+    node_pos = {}
+    for n in G:
+        node = A.get_node(n)
+        try:
+            xx, yy = node.attr["pos"].split(',')
+            node_pos[n] = (float(xx), float(yy))
+        except:
+            print(f"No position for node {n}")
+
+    return node_pos
 
 
 @nx.utils.open_file(5, 'w+b')
-def view_pygraphviz(G, edgelabel=None, prog='dot', args='', suffix='', path
-    =None, show=True):
+def view_pygraphviz(G, edgelabel=None, prog='dot', args='', suffix='', path=None, show=True):
     """Views the graph G using the specified layout algorithm.
 
     Parameters
@@ -237,4 +300,34 @@ def view_pygraphviz(G, edgelabel=None, prog='dot', args='', suffix='', path
     see https://gitlab.com/graphviz/graphviz/-/issues/1767 for more info.
 
     """
-    pass
+    import pygraphviz
+    import tempfile
+    import os
+
+    if path is None:
+        path = tempfile.NamedTemporaryFile(suffix=f'{suffix}.png', delete=False)
+        close_file = True
+    else:
+        close_file = False
+
+    A = to_agraph(G)
+    A.layout(prog=prog, args=args)
+
+    if edgelabel is not None:
+        if callable(edgelabel):
+            for edge in A.edges():
+                edge.attr['label'] = str(edgelabel(edge.attr))
+        else:
+            for edge in A.edges():
+                edge.attr['label'] = str(edge.attr.get(edgelabel, ''))
+
+    A.draw(path=path, format='png', prog=prog, args=args)
+
+    if close_file:
+        path.close()
+
+    if show:
+        from PIL import Image
+        Image.open(path.name).show()
+
+    return path.name, A
