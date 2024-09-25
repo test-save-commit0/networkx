@@ -108,4 +108,28 @@ def cd_index(G, node, time_delta, *, time='time', weight=None):
            http://russellfunk.org/cdindex/static/papers/funk_ms_2017.pdf
 
     """
-    pass
+    if not G.is_directed():
+        raise nx.NetworkXNotImplemented("CD index is not implemented for undirected graphs.")
+
+    if not all(time in G.nodes[n] for n in G.nodes):
+        raise nx.NetworkXError("All nodes must have a 'time' attribute.")
+
+    focal_time = G.nodes[node][time]
+    max_time = focal_time + time_delta
+
+    predecessors = list(G.predecessors(node))
+    if not predecessors:
+        return 0.0
+
+    n_t = len(predecessors)
+    cd_sum = 0.0
+
+    for pred in predecessors:
+        pred_time = G.nodes[pred][time]
+        if pred_time <= max_time:
+            f_it = 1
+            b_it = int(any(G.has_edge(pred, succ) for succ in G.successors(node)))
+            w_it = G.nodes[pred].get(weight, 1) if weight else 1
+            cd_sum += (-2 * f_it * b_it + f_it) / w_it
+
+    return cd_sum / n_t
