@@ -98,7 +98,59 @@ def hopcroft_karp_matching(G, top_nodes=None):
        2.4 (1973), pp. 225--231. <https://doi.org/10.1137/0202019>.
 
     """
-    pass
+    if top_nodes is None:
+        try:
+            top_nodes = bipartite_sets(G)[0]
+        except nx.AmbiguousSolution:
+            msg = 'Bipartite graph is disconnected, provide top_nodes explicitly.'
+            raise nx.AmbiguousSolution(msg)
+
+    # Initialize matching and expose sets
+    matching = {}
+    exposed_top = set(top_nodes)
+    exposed_bottom = set(G) - set(top_nodes)
+
+    while True:
+        # Find an augmenting path
+        path = _find_augmenting_path(G, matching, exposed_top, exposed_bottom)
+        if not path:
+            break
+
+        # Augment the matching along the path
+        for i in range(0, len(path) - 1, 2):
+            u, v = path[i], path[i + 1]
+            matching[u] = v
+            matching[v] = u
+
+        # Update exposed sets
+        exposed_top -= set(path[::2])
+        exposed_bottom -= set(path[1::2])
+
+    return matching
+
+def _find_augmenting_path(G, matching, exposed_top, exposed_bottom):
+    """Find an augmenting path in the graph."""
+    queue = collections.deque(exposed_top)
+    parent = {v: None for v in exposed_top}
+    while queue:
+        u = queue.popleft()
+        if u in exposed_bottom:
+            # Found an augmenting path
+            path = [u]
+            while parent[u] is not None:
+                u = parent[u]
+                path.append(u)
+            return path[::-1]
+        for v in G[u]:
+            if v not in parent:
+                if v in matching:
+                    parent[v] = u
+                    parent[matching[v]] = v
+                    queue.append(matching[v])
+                else:
+                    parent[v] = u
+                    return [u, v]
+    return None
 
 
 @nx._dispatchable
@@ -149,7 +201,61 @@ def eppstein_matching(G, top_nodes=None):
     hopcroft_karp_matching
 
     """
-    pass
+    if top_nodes is None:
+        try:
+            top_nodes = bipartite_sets(G)[0]
+        except nx.AmbiguousSolution:
+            msg = 'Bipartite graph is disconnected, provide top_nodes explicitly.'
+            raise nx.AmbiguousSolution(msg)
+
+    # Initialize matching and free sets
+    matching = {}
+    free_top = set(top_nodes)
+    free_bottom = set(G) - set(top_nodes)
+
+    while True:
+        # Find an augmenting path
+        path = _eppstein_augmenting_path(G, matching, free_top, free_bottom)
+        if not path:
+            break
+
+        # Augment the matching along the path
+        for i in range(0, len(path) - 1, 2):
+            u, v = path[i], path[i + 1]
+            matching[u] = v
+            matching[v] = u
+
+        # Update free sets
+        free_top -= set(path[::2])
+        free_bottom -= set(path[1::2])
+
+    return matching
+
+def _eppstein_augmenting_path(G, matching, free_top, free_bottom):
+    """Find an augmenting path in the graph using Eppstein's algorithm."""
+    path = []
+    used = set()
+    
+    def dfs(v):
+        used.add(v)
+        if v in free_bottom:
+            return True
+        for u in G[v]:
+            if u not in used:
+                path.append((v, u))
+                if u in matching:
+                    if dfs(matching[u]):
+                        return True
+                else:
+                    if dfs(u):
+                        return True
+                path.pop()
+        return False
+
+    for v in free_top:
+        if dfs(v):
+            return [item for pair in path for item in pair]
+    return None
 
 
 def _is_connected_by_alternating_path(G, v, matched_edges, unmatched_edges,
@@ -175,7 +281,28 @@ def _is_connected_by_alternating_path(G, v, matched_edges, unmatched_edges,
     `targets` is a set of vertices.
 
     """
-    pass
+    visited = set()
+    stack = [(v, True)]  # (vertex, use_matched_edge)
+
+    while stack:
+        current, use_matched = stack.pop()
+        
+        if current in visited:
+            continue
+        
+        visited.add(current)
+        
+        if current in targets:
+            return True
+        
+        edges_to_check = matched_edges if use_matched else unmatched_edges
+        
+        for neighbor in G[current]:
+            edge = frozenset([current, neighbor])
+            if edge in edges_to_check:
+                stack.append((neighbor, not use_matched))
+    
+    return False
 
 
 def _connected_by_alternating_paths(G, matching, targets):
@@ -196,7 +323,21 @@ def _connected_by_alternating_paths(G, matching, targets):
     `targets` is a set of vertices.
 
     """
-    pass
+    matched_edges = {frozenset((v, matching[v])) for v in matching}
+    unmatched_edges = {frozenset(e) for e in G.edges() if frozenset(e) not in matched_edges}
+    
+    connected = set(targets)
+    to_explore = set(targets)
+    
+    while to_explore:
+        v = to_explore.pop()
+        for neighbor in G[v]:
+            if neighbor not in connected:
+                if _is_connected_by_alternating_path(G, neighbor, matched_edges, unmatched_edges, targets):
+                    connected.add(neighbor)
+                    to_explore.add(neighbor)
+    
+    return connected
 
 
 @nx._dispatchable
@@ -260,7 +401,29 @@ def to_vertex_cover(G, matching, top_nodes=None):
     for further details on how bipartite graphs are handled in NetworkX.
 
     """
-    pass
+    if top_nodes is None:
+        try:
+            top_nodes = bipartite_sets(G)[0]
+        except nx.AmbiguousSolution:
+            msg = 'Bipartite graph is disconnected, provide top_nodes explicitly.'
+            raise nx.AmbiguousSolution(msg)
+
+    # Initialize the vertex cover with the unmatched vertices on the right side
+    vertex_cover = set(G) - set(top_nodes) - set(matching.keys())
+
+    # Add the matched vertices on the left side
+    vertex_cover.update(set(top_nodes) & set(matching.keys()))
+
+    # Find alternating paths starting from unmatched vertices on the left side
+    unmatched_vertices = set(top_nodes) - set(matching.keys())
+    targets = set(G) - set(top_nodes) - set(matching.values())
+    connected = _connected_by_alternating_paths(G, matching, targets)
+
+    # Update the vertex cover
+    vertex_cover.update(set(top_nodes) - connected)
+    vertex_cover.update(set(G) - set(top_nodes) & connected)
+
+    return vertex_cover
 
 
 maximum_matching = hopcroft_karp_matching
@@ -332,4 +495,44 @@ def minimum_weight_full_matching(G, top_nodes=None, weight='weight'):
        Networks, 10(2):143–152, 1980.
 
     """
-    pass
+    try:
+        import scipy.optimize
+    except ImportError:
+        raise ImportError("minimum_weight_full_matching requires SciPy")
+
+    if top_nodes is None:
+        try:
+            top_nodes = bipartite_sets(G)[0]
+        except nx.AmbiguousSolution:
+            msg = 'Bipartite graph is disconnected, provide top_nodes explicitly.'
+            raise nx.AmbiguousSolution(msg)
+
+    top_nodes = list(top_nodes)
+    bottom_nodes = list(set(G) - set(top_nodes))
+
+    # Create the cost matrix
+    cost_matrix = biadjacency_matrix(G, row_order=top_nodes,
+                                     column_order=bottom_nodes,
+                                     weight=weight).toarray()
+
+    # Pad the cost matrix if necessary
+    n, m = cost_matrix.shape
+    if n > m:
+        cost_matrix = np.column_stack([cost_matrix, np.full((n, n - m), np.inf)])
+    elif m > n:
+        cost_matrix = np.row_stack([cost_matrix, np.full((m - n, m), np.inf)])
+
+    # Solve the assignment problem
+    row_ind, col_ind = scipy.optimize.linear_sum_assignment(cost_matrix)
+
+    # Create the matching dictionary
+    matching = {}
+    for r, c in zip(row_ind, col_ind):
+        if r < len(top_nodes) and c < len(bottom_nodes):
+            matching[top_nodes[r]] = bottom_nodes[c]
+            matching[bottom_nodes[c]] = top_nodes[r]
+
+    if len(matching) != 2 * min(len(top_nodes), len(bottom_nodes)):
+        raise ValueError("No full matching exists.")
+
+    return matching
