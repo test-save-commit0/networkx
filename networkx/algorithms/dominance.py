@@ -51,7 +51,56 @@ def immediate_dominators(G, start):
            A simple, fast dominance algorithm.
            Software Practice & Experience, 4:110, 2001.
     """
-    pass
+    if start not in G:
+        raise nx.NetworkXError(f"Start node {start} is not in G")
+
+    idom = {start: start}
+    order = list(nx.dfs_preorder_nodes(G, start))
+    dfn = {u: i for i, u in enumerate(order)}
+    vertex = {i: v for v, i in dfn.items()}
+    semi = dfn.copy()
+    parent = dfn.copy()
+    pred = {u: set() for u in order}
+    ancestor = {}
+    label = {}
+    dom = {}
+
+    def compress(v):
+        if ancestor[v] != ancestor[ancestor[v]]:
+            compress(ancestor[v])
+            if semi[label[ancestor[v]]] < semi[label[v]]:
+                label[v] = label[ancestor[v]]
+            ancestor[v] = ancestor[ancestor[v]]
+
+    def eval(v):
+        if v not in ancestor:
+            return v
+        compress(v)
+        return label[v]
+
+    for v in reversed(order[1:]):
+        for u in G.predecessors(v):
+            if u in dfn:
+                pred[v].add(u)
+                if dfn[u] < dfn[v]:
+                    semi[v] = min(semi[v], dfn[u])
+                else:
+                    semi[v] = min(semi[v], semi[eval(u)])
+        ancestor[v] = parent[v]
+        dom[semi[v]] = v
+        w = dom[semi[v]]
+        while w != v:
+            if semi[w] >= semi[v]:
+                idom[w] = v
+            else:
+                idom[w] = idom[v]
+            w = dom[semi[w]]
+
+    for v in order[1:]:
+        if idom[v] != vertex[semi[v]]:
+            idom[v] = idom[idom[v]]
+
+    return {v: idom[dfn[v]] for v in G if v in dfn}
 
 
 @nx._dispatchable
@@ -92,4 +141,25 @@ def dominance_frontiers(G, start):
            A simple, fast dominance algorithm.
            Software Practice & Experience, 4:110, 2001.
     """
-    pass
+    if start not in G:
+        raise nx.NetworkXError(f"Start node {start} is not in G")
+
+    idom = immediate_dominators(G, start)
+    df = {u: set() for u in G}
+    
+    # Compute children in the dominator tree
+    dom_children = {u: set() for u in G}
+    for v, u in idom.items():
+        if u != v:
+            dom_children[u].add(v)
+
+    def dfs(u):
+        for v in G.successors(u):
+            if idom[v] != u:
+                df[u].add(v)
+        for child in dom_children[u]:
+            dfs(child)
+            df[u].update(v for v in df[child] if idom[v] != u)
+
+    dfs(start)
+    return {u: list(frontiers) for u, frontiers in df.items()}
