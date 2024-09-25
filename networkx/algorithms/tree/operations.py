@@ -17,7 +17,14 @@ def join(rooted_trees, label_attribute=None):
        It has been renamed join_trees with the same syntax/interface.
 
     """
-    pass
+    import warnings
+    warnings.warn(
+        "`join` is deprecated and will be removed in version 3.4. "
+        "Use `join_trees` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return join_trees(rooted_trees, label_attribute=label_attribute)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -79,4 +86,35 @@ def join_trees(rooted_trees, *, label_attribute=None, first_label=0):
         True
 
     """
-    pass
+    joined_tree = nx.Graph()
+    new_root = first_label
+    joined_tree.add_node(new_root)
+
+    next_label = first_label + 1
+    for tree, root in rooted_trees:
+        mapping = {}
+        for node in tree.nodes():
+            if node == root:
+                mapping[node] = new_root
+            else:
+                mapping[node] = next_label
+                if label_attribute is not None:
+                    joined_tree.nodes[next_label][label_attribute] = node
+                next_label += 1
+
+        # Add nodes and edges from the current tree to the joined tree
+        for node, data in tree.nodes(data=True):
+            if node != root:
+                joined_tree.add_node(mapping[node], **data)
+
+        for u, v, data in tree.edges(data=True):
+            joined_tree.add_edge(mapping[u], mapping[v], **data)
+
+        # Connect the root of the current tree to the new root
+        if root != mapping[root]:
+            joined_tree.add_edge(new_root, mapping[root])
+
+        # Propagate graph attributes
+        joined_tree.graph.update(tree.graph)
+
+    return joined_tree
