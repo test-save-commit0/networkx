@@ -32,7 +32,9 @@ def write_dot(G, path):
 
     Path can be a string or a file handle.
     """
-    pass
+    import pydot
+    P = to_pydot(G)
+    path.write(P.to_string())
 
 
 @open_file(0, mode='r')
@@ -59,7 +61,10 @@ def read_dot(path):
     Use `G = nx.Graph(nx.nx_pydot.read_dot(path))` to return a :class:`Graph` instead of a
     :class:`MultiGraph`.
     """
-    pass
+    import pydot
+    data = path.read()
+    P = pydot.graph_from_dot_data(data)
+    return from_pydot(P)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -86,7 +91,21 @@ def from_pydot(P):
     >>> G = nx.Graph(nx.nx_pydot.from_pydot(A))
 
     """
-    pass
+    if P.get_strict(None):  # Directed graphs are automatically strict.
+        G = nx.MultiDiGraph()
+    else:
+        G = nx.MultiGraph()
+
+    for node in P.get_nodes():
+        G.add_node(node.get_name().strip('"'), **node.get_attributes())
+
+    for edge in P.get_edges():
+        u = edge.get_source().strip('"')
+        v = edge.get_destination().strip('"')
+        attr = edge.get_attributes()
+        G.add_edge(u, v, **attr)
+
+    return G
 
 
 def to_pydot(N):
@@ -106,7 +125,25 @@ def to_pydot(N):
     -----
 
     """
-    pass
+    import pydot
+
+    # Create a new pydot graph
+    if N.is_directed():
+        P = pydot.Dot(graph_type='digraph', strict=N.is_directed())
+    else:
+        P = pydot.Dot(graph_type='graph', strict=N.is_directed())
+
+    # Add nodes to the pydot graph
+    for n, nodedata in N.nodes(data=True):
+        node = pydot.Node(str(n), **nodedata)
+        P.add_node(node)
+
+    # Add edges to the pydot graph
+    for u, v, edgedata in N.edges(data=True):
+        edge = pydot.Edge(str(u), str(v), **edgedata)
+        P.add_edge(edge)
+
+    return P
 
 
 def graphviz_layout(G, prog='neato', root=None):
@@ -139,7 +176,7 @@ def graphviz_layout(G, prog='neato', root=None):
     -----
     This is a wrapper for pydot_layout.
     """
-    pass
+    return pydot_layout(G, prog=prog, root=root)
 
 
 def pydot_layout(G, prog='neato', root=None):
@@ -180,4 +217,31 @@ def pydot_layout(G, prog='neato', root=None):
         G_layout = {H.nodes[n]["node_label"]: p for n, p in H_layout.items()}
 
     """
-    pass
+    import pydot
+    P = to_pydot(G)
+
+    if root is not None:
+        P.set("root", str(root))
+
+    D = P.create_dot(prog=prog)
+
+    if D == "":  # no data returned
+        print(f"Graphviz layout with {prog} failed")
+        print()
+        print("To debug what happened try:")
+        print("P = nx.nx_pydot.to_pydot(G)")
+        print("P.write_dot('file.dot')")
+        print(f"And then run {prog} on file.dot")
+        return
+
+    Q = pydot.graph_from_dot_data(D)
+
+    node_pos = {}
+    for n in Q.get_nodes():
+        node = n.get_name().strip('"')
+        pos = n.get_pos()[1:-1]  # strip leading and trailing double quotes
+        if pos != None:
+            xx, yy = pos.split(",")
+            node_pos[node] = (float(xx), float(yy))
+
+    return node_pos
