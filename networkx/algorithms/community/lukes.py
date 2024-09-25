@@ -59,4 +59,64 @@ def lukes_partitioning(G, max_size, node_weight=None, edge_weight=None):
        IBM Journal of Research and Development, 18(3), 217–224.
 
     """
-    pass
+    if not nx.is_tree(G):
+        raise nx.NotATree("Input graph is not a tree.")
+
+    # Set default weights if not provided
+    if edge_weight is None:
+        edge_weight = D_EDGE_W
+        nx.set_edge_attributes(G, D_EDGE_VALUE, D_EDGE_W)
+    if node_weight is None:
+        node_weight = D_NODE_W
+        nx.set_node_attributes(G, D_NODE_VALUE, D_NODE_W)
+
+    # Check if node weights are integers
+    for node, data in G.nodes(data=True):
+        if not isinstance(data.get(node_weight, D_NODE_VALUE), int):
+            raise TypeError(f"Node weight for node {node} is not an integer.")
+
+    # Choose an arbitrary root
+    root = next(iter(G.nodes()))
+
+    # Initialize memoization cache
+    memo = {}
+
+    def dp(node, parent, remaining_size):
+        if (node, remaining_size) in memo:
+            return memo[(node, remaining_size)]
+
+        node_w = G.nodes[node].get(node_weight, D_NODE_VALUE)
+        if node_w > remaining_size:
+            return float('inf'), []
+
+        children = [child for child in G.neighbors(node) if child != parent]
+        if not children:
+            return 0, [{node}]
+
+        best_cut = float('inf')
+        best_partition = []
+
+        for size in range(node_w, remaining_size + 1):
+            cut, partition = 0, [{node}]
+            for child in children:
+                child_cut, child_partition = dp(child, node, size - node_w)
+                cut += child_cut
+                cut += G[node][child].get(edge_weight, D_EDGE_VALUE)
+                partition.extend(child_partition)
+
+            remaining_cut, remaining_partition = dp(children[0], node, max_size)
+            for child in children[1:]:
+                child_cut, child_partition = dp(child, node, max_size)
+                remaining_cut += child_cut
+                remaining_partition.extend(child_partition)
+
+            total_cut = cut + remaining_cut
+            if total_cut < best_cut:
+                best_cut = total_cut
+                best_partition = partition + remaining_partition
+
+        memo[(node, remaining_size)] = (best_cut, best_partition)
+        return best_cut, best_partition
+
+    _, partition = dp(root, None, max_size)
+    return partition
