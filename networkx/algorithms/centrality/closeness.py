@@ -101,7 +101,44 @@ def closeness_centrality(G, u=None, distance=None, wf_improved=True):
        Social Network Analysis: Methods and Applications, 1994,
        Cambridge University Press.
     """
-    pass
+    if G.is_directed():
+        G = G.reverse()  # reverse the graph if directed
+    
+    if distance is not None:
+        path_length = functools.partial(nx.dijkstra_path_length, weight=distance)
+    else:
+        path_length = nx.shortest_path_length
+    
+    if u is not None:
+        # node u specified, return only its closeness centrality
+        closeness = single_node_closeness(G, u, path_length, wf_improved)
+        return closeness
+    
+    # compute closeness centrality for all nodes
+    closeness = {}
+    nodes = G.nodes()
+    for n in nodes:
+        sp = dict(path_length(G, n))
+        totsp = sum(sp.values())
+        if totsp > 0.0 and len(G) > 1:
+            closeness[n] = (len(sp) - 1.0) / totsp
+            if wf_improved:
+                closeness[n] *= (len(sp) - 1) / (len(G) - 1)
+        else:
+            closeness[n] = 0.0
+    return closeness
+
+def single_node_closeness(G, node, path_length, wf_improved):
+    """Helper function to compute closeness centrality for a single node."""
+    sp = dict(path_length(G, node))
+    totsp = sum(sp.values())
+    if totsp > 0.0 and len(G) > 1:
+        closeness = (len(sp) - 1.0) / totsp
+        if wf_improved:
+            closeness *= (len(sp) - 1) / (len(G) - 1)
+    else:
+        closeness = 0.0
+    return closeness
 
 
 @not_implemented_for('directed')
@@ -198,4 +235,37 @@ def incremental_closeness_centrality(G, edge, prev_cc=None, insertion=True,
        Algorithms for Closeness Centrality. 2013 IEEE International Conference on Big Data
        http://sariyuce.com/papers/bigdata13.pdf
     """
-    pass
+    if prev_cc is None:
+        return closeness_centrality(G, wf_improved=wf_improved)
+
+    u, v = edge
+    if insertion:
+        G.add_edge(u, v)
+        d_u = dict(nx.single_source_shortest_path_length(G, u))
+        d_v = dict(nx.single_source_shortest_path_length(G, v))
+        G.remove_edge(u, v)
+    else:
+        G.remove_edge(u, v)
+        d_u = dict(nx.single_source_shortest_path_length(G, u))
+        d_v = dict(nx.single_source_shortest_path_length(G, v))
+        G.add_edge(u, v)
+
+    nodes_to_update = [n for n in G.nodes() if abs(d_u[n] - d_v[n]) > 1]
+    
+    if insertion:
+        G.add_edge(u, v)
+    else:
+        G.remove_edge(u, v)
+
+    cc = prev_cc.copy()
+    for node in nodes_to_update:
+        sp = dict(nx.single_source_shortest_path_length(G, node))
+        totsp = sum(sp.values())
+        if totsp > 0.0 and len(G) > 1:
+            cc[node] = (len(sp) - 1.0) / totsp
+            if wf_improved:
+                cc[node] *= (len(sp) - 1) / (len(G) - 1)
+        else:
+            cc[node] = 0.0
+
+    return cc
