@@ -35,7 +35,7 @@ def is_isolate(G, n):
     >>> nx.is_isolate(G, 3)
     True
     """
-    pass
+    return G.degree(n) == 0
 
 
 @nx._dispatchable
@@ -81,7 +81,7 @@ def isolates(G):
         [3]
 
     """
-    pass
+    return (n for n in G if G.degree(n) == 0)
 
 
 @nx._dispatchable
@@ -102,4 +102,4 @@ def number_of_isolates(G):
         The number of degree zero nodes in the graph `G`.
 
     """
-    pass
+    return sum(1 for _ in isolates(G))
