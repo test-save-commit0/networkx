@@ -38,7 +38,44 @@ def _generate_sparse6_bytes(G, nodes, header):
     the graph6 format (that is, greater than ``2 ** 36`` nodes).
 
     """
-    pass
+    if header:
+        yield b'>>sparse6<<'
+
+    n = len(nodes)
+    if n >= 2**36:
+        raise ValueError("sparse6 format supports graphs up to 2**36 nodes")
+    
+    yield n_to_data(n)
+
+    k = 1
+    while 1 << k < n:
+        k += 1
+
+    nde = [nodes.index(v) for v in G]
+    bits = []
+    curlen = 0
+    for v in range(n):
+        for x in G.neighbors(nodes[v]):
+            i = nde[x]
+            if i > v:
+                bits.extend(int_to_bits(v, k))
+                bits.extend(int_to_bits(i-v-1, k))
+                curlen += 2*k
+                if curlen > 6:
+                    yield bits_to_bytes(bits[:6])
+                    bits = bits[6:]
+                    curlen -= 6
+    if curlen > 0:
+        yield bits_to_bytes(bits)
+
+    yield b'\n'
+
+def int_to_bits(x, k):
+    return [int(c) for c in f'{x:0{k}b}']
+
+def bits_to_bytes(bits):
+    return bytes([sum(b << (5-i) for i, b in enumerate(bits[j:j+6])) + 63
+                  for j in range(0, len(bits), 6)])
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -75,7 +112,47 @@ def from_sparse6_bytes(string):
            <https://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    if string.startswith(b'>>sparse6<<'):
+        string = string[11:]
+    if not string.startswith(b':'):
+        raise NetworkXError('Expected colon in sparse6')
+    
+    n, data = data_to_n(string[1:])
+    k = 1
+    while 1 << k < n:
+        k += 1
+
+    def bits():
+        for d in data:
+            for i in range(6):
+                yield (d - 63) >> (5 - i) & 1
+
+    nde = n
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+
+    try:
+        for b in bits():
+            if b:
+                v = int(''.join(str(b) for b in islice(bits(), k)), 2)
+                if v >= n:
+                    break  # padding with ones can cause this
+                nde = v
+            else:
+                v = nde
+                nde += 1
+                if nde > n:
+                    break  # padding with zeros can cause this
+            w = int(''.join(str(b) for b in islice(bits(), k)), 2)
+            w += v + 1
+            if w < n:
+                G.add_edge(v, w)
+    except (StopIteration, ValueError):
+        pass
+
+    return G
+
+from itertools import islice
 
 
 def to_sparse6_bytes(G, nodes=None, header=True):
@@ -122,7 +199,19 @@ def to_sparse6_bytes(G, nodes=None, header=True):
            <https://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    if G.is_directed():
+        raise nx.NetworkXNotImplemented("Not implemented for directed graphs.")
+    
+    if nodes is None:
+        nodes = list(G)
+    else:
+        nodes = list(nodes)
+    
+    n = len(nodes)
+    if n >= 2**36:
+        raise ValueError("sparse6 format supports graphs up to 2**36 nodes")
+    
+    return b''.join(_generate_sparse6_bytes(G, nodes, header))
 
 
 @open_file(0, mode='rb')
@@ -177,7 +266,16 @@ def read_sparse6(path):
            <https://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    glist = []
+    for line in path:
+        line = line.strip()
+        if not len(line):
+            continue
+        glist.append(from_sparse6_bytes(line))
+    if len(glist) == 1:
+        return glist[0]
+    else:
+        return glist
 
 
 @not_implemented_for('directed')
@@ -236,4 +334,4 @@ def write_sparse6(G, path, nodes=None, header=True):
            <https://users.cecs.anu.edu.au/~bdm/data/formats.html>
 
     """
-    pass
+    path.write(to_sparse6_bytes(G, nodes, header))
