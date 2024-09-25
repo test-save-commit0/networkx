@@ -61,7 +61,55 @@ def to_networkx_graph(data, create_using=None, multigraph_input=False):
         a multigraph from a multigraph.
 
     """
-    pass
+    if create_using is None:
+        create_using = nx.Graph
+
+    if isinstance(data, nx.Graph):
+        return nx.convert_to_type(data, create_using)
+
+    G = create_using()
+    G.clear()
+
+    if isinstance(data, dict):
+        if multigraph_input and all(isinstance(v, dict) for v in data.values()):
+            return from_dict_of_dicts(data, create_using=create_using, multigraph_input=True)
+        elif all(isinstance(v, dict) for v in data.values()):
+            return from_dict_of_dicts(data, create_using=create_using)
+        elif all(isinstance(v, (list, set)) for v in data.values()):
+            return from_dict_of_lists(data, create_using=create_using)
+
+    if isinstance(data, (list, set, tuple)) or isinstance(data, Iterator) or isinstance(data, Generator):
+        return from_edgelist(data, create_using=create_using)
+
+    try:
+        import pandas as pd
+        if isinstance(data, pd.DataFrame):
+            return nx.from_pandas_edgelist(data, create_using=create_using)
+    except ImportError:
+        pass
+
+    try:
+        import numpy as np
+        if isinstance(data, np.ndarray):
+            return nx.from_numpy_array(data, create_using=create_using)
+    except ImportError:
+        pass
+
+    try:
+        from scipy import sparse
+        if sparse.issparse(data):
+            return nx.from_scipy_sparse_array(data, create_using=create_using)
+    except ImportError:
+        pass
+
+    try:
+        import pygraphviz
+        if isinstance(data, pygraphviz.AGraph):
+            return nx.from_pygraphviz(data, create_using=create_using)
+    except ImportError:
+        pass
+
+    raise nx.NetworkXError("Data type not recognized")
 
 
 @nx._dispatchable
@@ -81,7 +129,13 @@ def to_dict_of_lists(G, nodelist=None):
     Completely ignores edge data for MultiGraph and MultiDiGraph.
 
     """
-    pass
+    if nodelist is None:
+        nodelist = G.nodes()
+
+    d = {}
+    for n in nodelist:
+        d[n] = [nbr for nbr in G.neighbors(n) if nbr in nodelist]
+    return d
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -106,7 +160,18 @@ def from_dict_of_lists(d, create_using=None):
     >>> G = nx.Graph(dol)  # use Graph constructor
 
     """
-    pass
+    G = nx.empty_graph(0, create_using)
+    G.add_nodes_from(d)
+    if G.is_multigraph():
+        G.add_edges_from((n, nbr, k)
+            for n, nbrlist in d.items()
+            for nbr in nbrlist
+            for k in range(G.number_of_edges(n, nbr), len([n, nbr])))
+    else:
+        G.add_edges_from((n, nbr)
+            for n, nbrlist in d.items()
+            for nbr in nbrlist)
+    return G
 
 
 def to_dict_of_dicts(G, nodelist=None, edge_data=None):
@@ -206,7 +271,25 @@ def to_dict_of_dicts(G, nodelist=None, edge_data=None):
     >>> d
     {0: {1: 10}, 1: {0: 10}}
     """
-    pass
+    dod = {}
+    if nodelist is None:
+        nodelist = G.nodes()
+    
+    if G.is_multigraph():
+        for n in nodelist:
+            dod[n] = {}
+            for nbr, keydict in G.adj[n].items():
+                if nbr in nodelist:
+                    dod[n][nbr] = {}
+                    for key, data in keydict.items():
+                        dod[n][nbr][key] = data if edge_data is None else edge_data
+    else:
+        for n in nodelist:
+            dod[n] = {}
+            for nbr, data in G.adj[n].items():
+                if nbr in nodelist:
+                    dod[n][nbr] = data if edge_data is None else edge_data
+    return dod
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -238,7 +321,25 @@ def from_dict_of_dicts(d, create_using=None, multigraph_input=False):
     >>> G = nx.Graph(dod)  # use Graph constructor
 
     """
-    pass
+    G = nx.empty_graph(0, create_using)
+    G.add_nodes_from(d)
+    
+    if multigraph_input:
+        if G.is_multigraph():
+            G.add_edges_from((u, v, key, data)
+                for u, nbrs in d.items()
+                for v, keydict in nbrs.items()
+                for key, data in keydict.items())
+        else:
+            G.add_edges_from((u, v, data)
+                for u, nbrs in d.items()
+                for v, keydict in nbrs.items()
+                for data in keydict.values())
+    else:
+        G.add_edges_from((u, v, data)
+            for u, nbrs in d.items()
+            for v, data in nbrs.items())
+    return G
 
 
 @nx._dispatchable(preserve_edge_attrs=True)
@@ -254,7 +355,9 @@ def to_edgelist(G, nodelist=None):
        Use only nodes specified in nodelist
 
     """
-    pass
+    if nodelist is None:
+        return G.edges(data=True)
+    return ((u, v, d) for u, v, d in G.edges(data=True) if u in nodelist and v in nodelist)
 
 
 @nx._dispatchable(graphs=None, returns_graph=True)
@@ -279,4 +382,6 @@ def from_edgelist(edgelist, create_using=None):
     >>> G = nx.Graph(edgelist)  # use Graph constructor
 
     """
-    pass
+    G = nx.empty_graph(0, create_using)
+    G.add_edges_from(edgelist)
+    return G
