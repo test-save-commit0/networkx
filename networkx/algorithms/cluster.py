@@ -45,7 +45,12 @@ def triangles(G, nodes=None):
     Self loops are ignored.
 
     """
-    pass
+    if nodes in G:
+        return sum(1 for _ in nx.triangles_iter(G, nodes)) // 2
+    elif nodes is None:
+        return {n: sum(1 for _ in nx.triangles_iter(G, n)) // 2 for n in G}
+    else:
+        return {n: sum(1 for _ in nx.triangles_iter(G, n)) // 2 for n in nodes if n in G}
 
 
 @not_implemented_for('multigraph')
@@ -57,7 +62,13 @@ def _triangles_and_degree_iter(G, nodes=None):
     and details.
 
     """
-    pass
+    if nodes is None:
+        nodes = G
+    for v in nodes:
+        deg = G.degree(v)
+        ntriangles = sum(1 for _ in nx.triangles_iter(G, v))
+        gen_deg = Counter(len(set(G[u]) & set(G[w])) for u, w in combinations(G[v], 2))
+        yield (v, deg, ntriangles, gen_deg)
 
 
 @not_implemented_for('multigraph')
@@ -70,7 +81,17 @@ def _weighted_triangles_and_degree_iter(G, nodes=None, weight='weight'):
     So you may want to divide by 2.
 
     """
-    pass
+    if nodes is None:
+        nodes = G
+    for v in nodes:
+        deg = G.degree(v, weight=weight)
+        wtriangles = 0
+        for u, w in combinations(G[v], 2):
+            if w in G[u]:
+                wtriangles += (G[v][u].get(weight, 1) *
+                               G[v][w].get(weight, 1) *
+                               G[u][w].get(weight, 1)) ** (1/3)
+        yield (v, deg, wtriangles)
 
 
 @not_implemented_for('multigraph')
@@ -83,12 +104,20 @@ def _directed_triangles_and_degree_iter(G, nodes=None):
     directed triangles so does not count triangles twice.
 
     """
-    pass
+    if nodes is None:
+        nodes = G
+    for v in nodes:
+        dtriangles = 0
+        for u, w in permutations(G.successors(v), 2):
+            if G.has_edge(u, w):
+                dtriangles += 1
+        total_degree = G.in_degree(v) + G.out_degree(v)
+        reciprocal_degree = sum(1 for u in G.successors(v) if G.has_edge(u, v))
+        yield (v, total_degree, reciprocal_degree, dtriangles)
 
 
 @not_implemented_for('multigraph')
-def _directed_weighted_triangles_and_degree_iter(G, nodes=None, weight='weight'
-    ):
+def _directed_weighted_triangles_and_degree_iter(G, nodes=None, weight='weight'):
     """Return an iterator of
     (node, total_degree, reciprocal_degree, directed_weighted_triangles).
 
@@ -97,7 +126,19 @@ def _directed_weighted_triangles_and_degree_iter(G, nodes=None, weight='weight'
     directed triangles so does not count triangles twice.
 
     """
-    pass
+    if nodes is None:
+        nodes = G
+    for v in nodes:
+        dwtriangles = 0
+        for u, w in permutations(G.successors(v), 2):
+            if G.has_edge(u, w):
+                dwtriangles += (G[v][u].get(weight, 1) *
+                                G[v][w].get(weight, 1) *
+                                G[u][w].get(weight, 1)) ** (1/3)
+        total_degree = sum(d.get(weight, 1) for u, d in G.pred[v].items()) + \
+                       sum(d.get(weight, 1) for u, d in G.succ[v].items())
+        reciprocal_degree = sum(1 for u in G.successors(v) if G.has_edge(u, v))
+        yield (v, total_degree, reciprocal_degree, dwtriangles)
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -154,7 +195,10 @@ def average_clustering(G, nodes=None, weight=None, count_zeros=True):
        nodes and leafs on clustering measures for small-world networks.
        https://arxiv.org/abs/0802.2512
     """
-    pass
+    c = clustering(G, nodes, weight)
+    if not count_zeros:
+        c = {n: v for n, v in c.items() if v != 0}
+    return sum(c.values()) / len(c) if len(c) > 0 else 0.0
 
 
 @nx._dispatchable(edge_attrs='weight')
@@ -245,7 +289,27 @@ def clustering(G, nodes=None, weight=None):
     .. [4] Clustering in complex directed networks by G. Fagiolo,
        Physical Review E, 76(2), 026107 (2007).
     """
-    pass
+    if G.is_directed():
+        if weight is not None:
+            td_iter = _directed_weighted_triangles_and_degree_iter(G, nodes, weight)
+            clusterc = {v: 0 if t == 0 else t / ((dt * (dt - 1) - 2 * db) * 2) for
+                        v, dt, db, t in td_iter}
+        else:
+            td_iter = _directed_triangles_and_degree_iter(G, nodes)
+            clusterc = {v: 0 if t == 0 else t / ((dt * (dt - 1) - 2 * db) * 2) for
+                        v, dt, db, t in td_iter}
+    else:
+        if weight is not None:
+            td_iter = _weighted_triangles_and_degree_iter(G, nodes, weight)
+            clusterc = {v: 0 if d < 2 else t / (d * (d - 1)) for
+                        v, d, t in td_iter}
+        else:
+            td_iter = _triangles_and_degree_iter(G, nodes)
+            clusterc = {v: 0 if d < 2 else t / (d * (d - 1)) for
+                        v, d, t, _ in td_iter}
+    if nodes in G:
+        return clusterc[nodes]
+    return clusterc
 
 
 @nx._dispatchable
@@ -281,7 +345,9 @@ def transitivity(G):
     >>> print(nx.transitivity(G))
     1.0
     """
-    pass
+    triangles = sum(nx.triangles(G).values()) / 3
+    contri = sum(d * (d - 1) for d in dict(G.degree()).values())
+    return 0 if triangles == 0 else triangles * 6.0 / contri
 
 
 @nx._dispatchable
@@ -339,7 +405,24 @@ def square_clustering(G, nodes=None):
         Bipartite Networks. Physica A: Statistical Mechanics and its Applications 387.27 (2008): 6869–6875.
         https://arxiv.org/abs/0710.0117v1
     """
-    pass
+    if nodes is None:
+        nodes = G
+    clustering = {}
+    for v in nodes:
+        clustering[v] = 0
+        potential = 0
+        for u, w in combinations(G[v], 2):
+            squares = len((set(G[u]) & set(G[w])) - {v})
+            clustering[v] += squares
+            degm = squares + 1
+            if w in G[u]:
+                degm += 1
+            potential += (len(G[u]) - degm) + (len(G[w]) - degm) + squares
+        if potential > 0:
+            clustering[v] /= potential
+    if nodes in G:
+        return clustering[nodes]
+    return clustering
 
 
 @not_implemented_for('directed')
@@ -403,4 +486,6 @@ def generalized_degree(G, nodes=None):
         Volume 97, Number 2 (2012).
         https://iopscience.iop.org/article/10.1209/0295-5075/97/28005
     """
-    pass
+    if nodes in G:
+        return next(generalized_degree_iter(G, nodes))[1]
+    return {v: gd for v, gd in generalized_degree_iter(G, nodes)}
