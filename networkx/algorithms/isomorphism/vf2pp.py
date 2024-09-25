@@ -561,7 +561,30 @@ def _update_Tinout(new_node1, new_node2, graph_params, state_params):
         T1_tilde, T2_tilde: set
             Ti_out contains all the nodes from Gi, that are neither in the mapping nor in Ti
     """
-    pass
+    G1, G2 = graph_params.G1, graph_params.G2
+    mapping, reverse_mapping, T1, T1_in, T1_tilde, T1_tilde_in, T2, T2_in, T2_tilde, T2_tilde_in = state_params
+
+    # Update T1 and T1_tilde
+    for neighbor in G1.neighbors(new_node1):
+        if neighbor not in mapping:
+            if neighbor in T1_tilde:
+                T1_tilde.remove(neighbor)
+            T1.add(neighbor)
+
+    # Update T2 and T2_tilde
+    for neighbor in G2.neighbors(new_node2):
+        if neighbor not in reverse_mapping:
+            if neighbor in T2_tilde:
+                T2_tilde.remove(neighbor)
+            T2.add(neighbor)
+
+    # Remove new_node1 and new_node2 from T1 and T2
+    T1.discard(new_node1)
+    T2.discard(new_node2)
+
+    # Remove new_node1 and new_node2 from T1_tilde and T2_tilde
+    T1_tilde.discard(new_node1)
+    T2_tilde.discard(new_node2)
 
 
 def _restore_Tinout(popped_node1, popped_node2, graph_params, state_params):
