@@ -32,7 +32,8 @@ def is_planar(G):
     check_planarity :
         Check if graph is planar *and* return a `PlanarEmbedding` instance if True.
     """
-    pass
+    is_planar, _ = check_planarity(G)
+    return is_planar
 
 
 @nx._dispatchable(returns_graph=True)
@@ -97,13 +98,29 @@ def check_planarity(G, counterexample=False):
         Lecture Notes Series on Computing: Volume 12
         2004
     """
-    pass
+    planarity_state = LRPlanarity(G)
+    is_planar = planarity_state.lr_planarity()
+    
+    if is_planar:
+        return True, planarity_state.embedding
+    elif counterexample:
+        return False, get_counterexample(G)
+    else:
+        return False, None
 
 
 @nx._dispatchable(returns_graph=True)
 def check_planarity_recursive(G, counterexample=False):
     """Recursive version of :meth:`check_planarity`."""
-    pass
+    planarity_state = LRPlanarity(G)
+    is_planar = planarity_state.lr_planarity_recursive()
+    
+    if is_planar:
+        return True, planarity_state.embedding
+    elif counterexample:
+        return False, get_counterexample_recursive(G)
+    else:
+        return False, None
 
 
 @nx._dispatchable(returns_graph=True)
@@ -126,7 +143,18 @@ def get_counterexample(G):
         A Kuratowski subgraph that proves that G is not planar.
 
     """
-    pass
+    if is_planar(G):
+        raise nx.NetworkXException("G is planar - no counter example exists")
+    
+    H = G.copy()
+    for e in G.edges():
+        H.remove_edge(*e)
+        if not is_planar(H):
+            G = H
+        else:
+            H.add_edge(*e)
+    
+    return G
 
 
 @nx._dispatchable(returns_graph=True)
