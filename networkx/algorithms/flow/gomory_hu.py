@@ -127,4 +127,35 @@ def gomory_hu_tree(G, capacity='capacity', flow_func=None):
            SIAM J Comput 19(1):143-155, 1990.
 
     """
-    pass
+    if G.is_directed():
+        raise nx.NetworkXNotImplemented("Gomory-Hu tree not implemented for directed graphs.")
+    
+    if G.number_of_nodes() == 0:
+        raise nx.NetworkXError("Cannot compute Gomory-Hu tree of an empty graph.")
+
+    if flow_func is None:
+        flow_func = default_flow_func
+
+    # Initialize the tree T with all nodes of G and a single edge connecting
+    # an arbitrary node to all other nodes with infinite weight
+    T = nx.Graph()
+    T.add_nodes_from(G.nodes())
+    root = next(iter(G.nodes()))
+    T.add_weighted_edges_from((root, v, float('inf')) for v in G.nodes() if v != root)
+
+    nodes = list(G.nodes())
+    for s in nodes[1:]:
+        t = next(T[s].keys())  # Choose the neighbor of s in T
+        cut_value, partition = nx.minimum_cut(G, s, t, capacity=capacity, flow_func=flow_func)
+        
+        # Update T based on the minimum s-t cut
+        T.remove_edge(s, t)
+        T.add_edge(s, t, weight=cut_value)
+        
+        for u in partition[0] - {s}:
+            if T.has_edge(t, u):
+                weight = T[t][u]['weight']
+                T.remove_edge(t, u)
+                T.add_edge(s, u, weight=weight)
+
+    return T
