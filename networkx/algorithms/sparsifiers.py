@@ -61,7 +61,42 @@ def spanner(G, stretch, weight=None, seed=None):
     Algorithm for Computing Sparse Spanners in Weighted Graphs.
     Random Struct. Algorithms 30(4): 532-563 (2007).
     """
-    pass
+    if stretch < 1:
+        raise ValueError("Stretch must be at least 1")
+
+    k = (stretch + 1) // 2
+    residual_graph = _setup_residual_graph(G, weight)
+    H = nx.Graph()
+    H.add_nodes_from(G.nodes())
+
+    # Initialize clustering
+    clustering = {v: v for v in G.nodes()}
+    
+    for _ in range(k - 1):
+        new_clustering = {}
+        for center in set(clustering.values()):
+            if seed.random() < 1 / math.sqrt(len(G)):
+                new_clustering[center] = center
+        
+        for v in G.nodes():
+            if clustering[v] not in new_clustering:
+                lightest_edges, _ = _lightest_edge_dicts(residual_graph, clustering, v)
+                for u, neighbor in lightest_edges.items():
+                    if u in new_clustering:
+                        _add_edge_to_spanner(H, residual_graph, v, neighbor, weight)
+                        break
+                else:
+                    new_clustering[v] = v
+        
+        clustering = new_clustering
+
+    # Add remaining edges
+    for v in G.nodes():
+        lightest_edges, _ = _lightest_edge_dicts(residual_graph, clustering, v)
+        for neighbor in lightest_edges.values():
+            _add_edge_to_spanner(H, residual_graph, v, neighbor, weight)
+
+    return H
 
 
 def _setup_residual_graph(G, weight):
@@ -88,7 +123,17 @@ def _setup_residual_graph(G, weight):
     NetworkX graph
         The residual graph used for the Baswana-Sen algorithm.
     """
-    pass
+    residual_graph = G.copy()
+    
+    if weight is None:
+        for i, (u, v) in enumerate(G.edges()):
+            residual_graph[u][v]['weight'] = i + 1
+    else:
+        edges = sorted(G.edges(data=weight), key=lambda x: (x[2], x[0], x[1]))
+        for i, (u, v, w) in enumerate(edges):
+            residual_graph[u][v]['weight'] = i + 1
+    
+    return residual_graph
 
 
 def _lightest_edge_dicts(residual_graph, clustering, node):
@@ -123,7 +168,18 @@ def _lightest_edge_dicts(residual_graph, clustering, node):
     residual graph then the center of the cluster is not a key in the
     returned dictionaries.
     """
-    pass
+    lightest_edge_neighbor = {}
+    lightest_edge_weight = {}
+
+    for neighbor in residual_graph.neighbors(node):
+        center = clustering[neighbor]
+        weight = residual_graph[node][neighbor]['weight']
+
+        if center not in lightest_edge_weight or weight < lightest_edge_weight[center]:
+            lightest_edge_neighbor[center] = neighbor
+            lightest_edge_weight[center] = weight
+
+    return lightest_edge_neighbor, lightest_edge_weight
 
 
 def _add_edge_to_spanner(H, residual_graph, u, v, weight):
@@ -148,4 +204,8 @@ def _add_edge_to_spanner(H, residual_graph, u, v, weight):
     weight : object
         The edge attribute to use as distance.
     """
-    pass
+    if weight is None:
+        H.add_edge(u, v)
+    else:
+        w = residual_graph[u][v][weight]
+        H.add_edge(u, v, **{weight: w})
