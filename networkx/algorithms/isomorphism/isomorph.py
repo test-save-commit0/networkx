@@ -25,7 +25,29 @@ def could_be_isomorphic(G1, G2):
     involving that node.
 
     """
-    pass
+    # Check if the graphs have the same number of nodes and edges
+    if G1.number_of_nodes() != G2.number_of_nodes() or G1.number_of_edges() != G2.number_of_edges():
+        return False
+
+    # Check degree sequence
+    degree_seq1 = sorted(d for n, d in G1.degree())
+    degree_seq2 = sorted(d for n, d in G2.degree())
+    if degree_seq1 != degree_seq2:
+        return False
+
+    # Check triangle sequence
+    triangle_seq1 = sorted(nx.triangles(G1).values())
+    triangle_seq2 = sorted(nx.triangles(G2).values())
+    if triangle_seq1 != triangle_seq2:
+        return False
+
+    # Check clique sequence
+    clique_seq1 = sorted(len(list(nx.cliques_containing_node(G1, n))) for n in G1)
+    clique_seq2 = sorted(len(list(nx.cliques_containing_node(G2, n))) for n in G2)
+    if clique_seq1 != clique_seq2:
+        return False
+
+    return True
 
 
 graph_could_be_isomorphic = could_be_isomorphic
@@ -47,7 +69,23 @@ def fast_could_be_isomorphic(G1, G2):
     Checks for matching degree and triangle sequences. The triangle
     sequence contains the number of triangles each node is part of.
     """
-    pass
+    # Check if the graphs have the same number of nodes and edges
+    if G1.number_of_nodes() != G2.number_of_nodes() or G1.number_of_edges() != G2.number_of_edges():
+        return False
+
+    # Check degree sequence
+    degree_seq1 = sorted(d for n, d in G1.degree())
+    degree_seq2 = sorted(d for n, d in G2.degree())
+    if degree_seq1 != degree_seq2:
+        return False
+
+    # Check triangle sequence
+    triangle_seq1 = sorted(nx.triangles(G1).values())
+    triangle_seq2 = sorted(nx.triangles(G2).values())
+    if triangle_seq1 != triangle_seq2:
+        return False
+
+    return True
 
 
 fast_graph_could_be_isomorphic = fast_could_be_isomorphic
@@ -68,7 +106,17 @@ def faster_could_be_isomorphic(G1, G2):
     -----
     Checks for matching degree sequences.
     """
-    pass
+    # Check if the graphs have the same number of nodes and edges
+    if G1.number_of_nodes() != G2.number_of_nodes() or G1.number_of_edges() != G2.number_of_edges():
+        return False
+
+    # Check degree sequence
+    degree_seq1 = sorted(d for n, d in G1.degree())
+    degree_seq2 = sorted(d for n, d in G2.degree())
+    if degree_seq1 != degree_seq2:
+        return False
+
+    return True
 
 
 faster_graph_could_be_isomorphic = faster_could_be_isomorphic
@@ -173,4 +221,14 @@ def is_isomorphic(G1, G2, node_match=None, edge_match=None):
        Pattern Recognition, Cuen, pp. 149-159, 2001.
        https://www.researchgate.net/publication/200034365_An_Improved_Algorithm_for_Matching_Large_Graphs
     """
-    pass
+    if G1.is_directed() != G2.is_directed():
+        return False
+
+    if G1.number_of_nodes() != G2.number_of_nodes():
+        return False
+
+    if G1.number_of_edges() != G2.number_of_edges():
+        return False
+
+    GM = nx.isomorphism.GraphMatcher(G1, G2, node_match=node_match, edge_match=edge_match)
+    return GM.is_isomorphic()
